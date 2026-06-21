@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/history_service.dart';
@@ -46,6 +47,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
   double _volume = 100;
+  bool _isFullscreen = false;
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
   StreamSubscription? _playSub;
@@ -159,6 +161,17 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     _overlayTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _showOverlay = false);
     });
+  }
+
+  Future<void> _toggleFullscreen() async {
+    _isFullscreen = !_isFullscreen;
+    if (_isFullscreen) {
+      await windowManager.setFullScreen(true);
+    } else {
+      await windowManager.setFullScreen(false);
+    }
+    setState(() {});
+    _keepOverlay();
   }
 
   Future<void> _loadEpisodes() async {
@@ -310,9 +323,22 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     _nextEpTimer?.cancel();
     _lastSavedPosition = Duration.zero;
     final api = context.read<ApiService>();
+    final cast = context.read<CastService>();
     final history = context.read<HistoryService>();
+    final proxyUrl = api.getProxyUrl(widget.anime.id, ep, widget.anime.provider, _lang);
+    final title = '${widget.anime.name} EP ${ep.toInt()}';
+
     try {
-      final proxyUrl = api.getProxyUrl(widget.anime.id, ep, widget.anime.provider, _lang);
+      // If casting, send to Chromecast instead of local player
+      if (cast.isConnected) {
+        await cast.cast(proxyUrl, title);
+        await history.save(widget.anime.id, widget.anime.name, widget.anime.provider, ep, _lang);
+        if (mounted) setState(() { _loadingStream = false; _playerReady = false; });
+        _scrollToEpisode(ep);
+        return;
+      }
+
+      // Local playback
       await _player.open(Media(proxyUrl));
       if (resumeFrom != null && resumeFrom.inSeconds > 3) {
         await Future.delayed(const Duration(milliseconds: 1500));
@@ -362,6 +388,12 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
         _player.setVolume(_volume);
         _keepOverlay();
         break;
+      case LogicalKeyboardKey.keyF:
+        _toggleFullscreen();
+        break;
+      case LogicalKeyboardKey.escape:
+        if (_isFullscreen) _toggleFullscreen();
+        break;
     }
   }
 
@@ -378,18 +410,62 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
       onKeyEvent: _handleKey,
       child: PopScope(
         onPopInvokedWithResult: (didPop, _) {
-          if (didPop) { _progressTimer?.cancel(); _saveCurrentProgress(); _player.pause(); }
+          if (didPop) {
+            if (_isFullscreen) windowManager.setFullScreen(false);
+            _progressTimer?.cancel();
+            _saveCurrentProgress();
+            _player.pause();
+          }
         },
         child: Scaffold(
           backgroundColor: const Color(0xFF0a0b0f),
-          appBar: AppBar(
+          appBar: _isFullscreen ? null : AppBar(
             title: Text(widget.anime.name, style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: _cyan), overflow: TextOverflow.ellipsis),
             leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: _textDim),
               onPressed: () { _progressTimer?.cancel(); _saveCurrentProgress(); _player.pause(); Navigator.pop(context); },
             ),
           ),
-          body: Column(
+          body: _isFullscreen
+              ? Stack(
+                  children: [
+                    Container(
+                      color: Colors.black,
+                      child: GestureDetector(
+                        onTap: _toggleOverlay,
+                        child: Video(controller: _videoController, controls: NoVideoControls),
+                      ),
+                    ),
+                    if (_showOverlay)
+                      _PlayerOverlay(
+                        position: _position,
+                        duration: _duration,
+                        isPlaying: _isPlaying,
+                        volume: _volume,
+                        onPlayPause: () { _isPlaying ? _player.pause() : _player.play(); _keepOverlay(); },
+                        onSeek: (v) { _player.seek(Duration(seconds: (v * _duration.inSeconds).round())); _keepOverlay(); },
+                        onVolume: (v) { setState(() => _volume = v); _player.setVolume(v); _keepOverlay(); },
+                        onSkipBack: () { _player.seek(_position - const Duration(seconds: 10)); _keepOverlay(); },
+                        onSkipForward: () { _player.seek(_position + const Duration(seconds: 10)); _keepOverlay(); },
+                        onCast: _showCastDialog,
+                        isCasting: cast.isConnected,
+                        onFullscreen: _toggleFullscreen,
+                        isFullscreen: _isFullscreen,
+                      ),
+                    if (_showNextEpPrompt)
+                      _NextEpPrompt(
+                        countdown: _nextEpCountdown,
+                        onPlay: () {
+                          _nextEpTimer?.cancel();
+                          setState(() => _showNextEpPrompt = false);
+                          final idx = _episodes.indexOf(_playingEp!);
+                          if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]);
+                        },
+                        onCancel: () { _nextEpTimer?.cancel(); setState(() => _showNextEpPrompt = false); },
+                      ),
+                  ],
+                )
+              : Column(
             children: [
               // Video player with overlay
               if (_playingEp != null)
@@ -423,6 +499,8 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           onSkipForward: () { _player.seek(_position + const Duration(seconds: 10)); _keepOverlay(); },
                           onCast: _showCastDialog,
                           isCasting: cast.isConnected,
+                          onFullscreen: _toggleFullscreen,
+                          isFullscreen: _isFullscreen,
                         ),
                       // Next episode prompt
                       if (_showNextEpPrompt)
@@ -525,7 +603,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                               ),
               ),
             ],
-          ),
+          ), // end Column (non-fullscreen)
         ),
       ),
     );
@@ -564,6 +642,8 @@ class _PlayerOverlay extends StatelessWidget {
   final VoidCallback onSkipForward;
   final VoidCallback onCast;
   final bool isCasting;
+  final VoidCallback onFullscreen;
+  final bool isFullscreen;
 
   const _PlayerOverlay({
     required this.position,
@@ -577,6 +657,8 @@ class _PlayerOverlay extends StatelessWidget {
     required this.onSkipForward,
     required this.onCast,
     required this.isCasting,
+    required this.onFullscreen,
+    required this.isFullscreen,
   });
 
   String _fmt(Duration d) {
@@ -664,6 +746,15 @@ class _PlayerOverlay extends StatelessWidget {
                   ),
                   child: Slider(value: volume / 100, onChanged: (v) => onVolume(v * 100)),
                 ),
+              ),
+              // Fullscreen button
+              IconButton(
+                icon: Icon(
+                  isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                  color: Colors.white70, size: 22,
+                ),
+                onPressed: onFullscreen,
+                tooltip: isFullscreen ? 'Exit fullscreen (F)' : 'Fullscreen (F)',
               ),
             ]),
           ),
