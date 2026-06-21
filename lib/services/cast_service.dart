@@ -20,13 +20,10 @@ class CastService extends ChangeNotifier {
   bool _isCasting = false;
   int _requestId = 1;
   StreamSubscription? _socketSub;
-
-  // Session state
   String? _sessionId;
   String? _transportId;
-
-  // Buffer for incoming data
   final List<int> _buffer = [];
+  Timer? _heartbeatTimer;
 
   List<ChromecastDevice> get devices => _devices;
   ChromecastDevice? get connectedDevice => _connectedDevice;
@@ -38,23 +35,19 @@ class CastService extends ChangeNotifier {
     _scanning = true;
     _devices = [];
     notifyListeners();
-
     try {
       final multicastGroup = InternetAddress('224.0.0.251');
-      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 5353,
-          reuseAddress: true, reusePort: true);
+      final socket = await RawDatagramSocket.bind(
+        InternetAddress.anyIPv4, 5353, reuseAddress: true, reusePort: true);
       socket.joinMulticast(multicastGroup);
       socket.broadcastEnabled = true;
-
       final query = _buildMdnsQuery('_googlecast._tcp.local');
       socket.send(query, multicastGroup, 5353);
-
       Timer(const Duration(seconds: 5), () {
         socket.close();
         _scanning = false;
         notifyListeners();
       });
-
       socket.listen((event) {
         if (event == RawSocketEvent.read) {
           final datagram = socket.receive();
@@ -111,24 +104,18 @@ class CastService extends ChangeNotifier {
       _buffer.clear();
       _sessionId = null;
       _transportId = null;
-
       _socketSub = _socket!.listen(
         _onData,
         onError: (_) => _handleDisconnect(),
         onDone: _handleDisconnect,
       );
-
-      // Send initial CONNECT
       _sendMessage(
         namespace: 'urn:x-cast:com.google.cast.tp.connection',
         sourceId: 'sender-0',
         destinationId: 'receiver-0',
         payload: {'type': 'CONNECT', 'userAgent': 'MAGI/1.0'},
       );
-
-      // Start heartbeat
       _startHeartbeat();
-
       notifyListeners();
       return true;
     } catch (_) {
@@ -138,7 +125,6 @@ class CastService extends ChangeNotifier {
     }
   }
 
-  Timer? _heartbeatTimer;
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -161,14 +147,10 @@ class CastService extends ChangeNotifier {
   void _processBuffer() {
     while (_buffer.length >= 4) {
       final msgLen = ByteData.sublistView(
-        Uint8List.fromList(_buffer.sublist(0, 4))
-      ).getUint32(0);
-
+        Uint8List.fromList(_buffer.sublist(0, 4))).getUint32(0);
       if (_buffer.length < 4 + msgLen) break;
-
       final msgData = _buffer.sublist(4, 4 + msgLen);
       _buffer.removeRange(0, 4 + msgLen);
-
       try {
         _handleMessage(Uint8List.fromList(msgData));
       } catch (_) {}
@@ -176,7 +158,6 @@ class CastService extends ChangeNotifier {
   }
 
   void _handleMessage(Uint8List data) {
-    // Parse protobuf manually to extract payload_utf8 (field 6)
     String? payload;
     int pos = 0;
     while (pos < data.length) {
@@ -184,20 +165,12 @@ class CastService extends ChangeNotifier {
       final fieldNum = tag >> 3;
       final wireType = tag & 0x07;
       pos++;
-
       if (wireType == 0) {
-        // Varint
-        int val = 0, shift = 0;
         while (pos < data.length) {
           final b = data[pos++];
-          val |= (b & 0x7F) << shift;
           if ((b & 0x80) == 0) break;
-          shift += 7;
         }
-        // ignore: unused_local_variable
-        // varint value, not needed
       } else if (wireType == 2) {
-        // Length-delimited
         int len = 0, shift = 0;
         while (pos < data.length) {
           final b = data[pos++];
@@ -214,13 +187,10 @@ class CastService extends ChangeNotifier {
         break;
       }
     }
-
     if (payload == null) return;
-
     try {
       final json = jsonDecode(payload) as Map<String, dynamic>;
       final type = json['type'] as String?;
-
       if (type == 'PING') {
         _sendMessage(
           namespace: 'urn:x-cast:com.google.cast.tp.heartbeat',
@@ -229,23 +199,19 @@ class CastService extends ChangeNotifier {
           payload: {'type': 'PONG'},
         );
       } else if (type == 'RECEIVER_STATUS') {
-        // Extract session and transport IDs
         final status = json['status'] as Map<String, dynamic>?;
         final apps = status?['applications'] as List?;
         if (apps != null && apps.isNotEmpty) {
           final app = apps.first as Map<String, dynamic>;
           _sessionId = app['sessionId'] as String?;
           _transportId = app['transportId'] as String?;
-
           if (_transportId != null && _sessionId != null) {
-            // Connect to the app transport
             _sendMessage(
               namespace: 'urn:x-cast:com.google.cast.tp.connection',
               sourceId: 'sender-0',
               destinationId: _transportId!,
               payload: {'type': 'CONNECT', 'userAgent': 'MAGI/1.0'},
             );
-            // Signal that we're ready to send LOAD
             notifyListeners();
           }
         }
@@ -261,34 +227,21 @@ class CastService extends ChangeNotifier {
 
   Future<void> cast(String url, String title) async {
     if (!_isConnected) return;
-
     _isCasting = false;
     _sessionId = null;
     _transportId = null;
-
     final id = _requestId++;
-
-    // Launch default media receiver app
     _sendMessage(
       namespace: 'urn:x-cast:com.google.cast.receiver',
       sourceId: 'sender-0',
       destinationId: 'receiver-0',
-      payload: {
-        'type': 'LAUNCH',
-        'appId': 'CC1AD845',
-        'requestId': id,
-      },
+      payload: {'type': 'LAUNCH', 'appId': 'CC1AD845', 'requestId': id},
     );
-
-    // Wait for RECEIVER_STATUS with transportId then send LOAD
-    // We poll until transportId is set (max 10 seconds)
     for (int i = 0; i < 20; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
       if (_transportId != null) break;
     }
-
     if (_transportId == null) return;
-
     _sendMessage(
       namespace: 'urn:x-cast:com.google.cast.media',
       sourceId: 'sender-0',
@@ -301,17 +254,28 @@ class CastService extends ChangeNotifier {
           'contentId': url,
           'contentType': 'video/mp4',
           'streamType': 'BUFFERED',
-          'metadata': {
-            'metadataType': 0,
-            'title': title,
-          },
+          'metadata': {'metadataType': 0, 'title': title},
         },
         'autoplay': true,
         'currentTime': 0,
       },
     );
-
     notifyListeners();
+  }
+
+  Future<void> seek(Duration position) async {
+    if (!_isConnected || _transportId == null) return;
+    _sendMessage(
+      namespace: 'urn:x-cast:com.google.cast.media',
+      sourceId: 'sender-0',
+      destinationId: _transportId!,
+      payload: {
+        'type': 'SEEK',
+        'requestId': _requestId++,
+        'currentTime': position.inSeconds,
+        'resumeState': 'PLAYBACK_START',
+      },
+    );
   }
 
   void _sendMessage({
@@ -331,33 +295,19 @@ class CastService extends ChangeNotifier {
   }
 
   Uint8List _buildCastMessage(
-    String namespace, String sourceId, String destinationId, List<int> payload,
-  ) {
+    String namespace, String sourceId, String destinationId, List<int> payload) {
     final buf = BytesBuilder();
-
     void writeField(int fieldNum, int wireType, List<int> data) {
       buf.addByte((fieldNum << 3) | wireType);
-      if (wireType == 2) {
-        _writeVarint(buf, data.length);
-        buf.add(data);
-      } else if (wireType == 0) {
-        buf.add(data);
-      }
+      if (wireType == 2) { _writeVarint(buf, data.length); buf.add(data); }
+      else if (wireType == 0) { buf.add(data); }
     }
-
-    // Field 1: protocol_version = 0 (varint)
     writeField(1, 0, [0x00]);
-    // Field 2: source_id
     writeField(2, 2, utf8.encode(sourceId));
-    // Field 3: destination_id
     writeField(3, 2, utf8.encode(destinationId));
-    // Field 4: namespace
     writeField(4, 2, utf8.encode(namespace));
-    // Field 5: payload_type = STRING (0)
     writeField(5, 0, [0x00]);
-    // Field 6: payload_utf8
     writeField(6, 2, payload);
-
     return buf.toBytes();
   }
 

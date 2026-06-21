@@ -443,10 +443,22 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         isPlaying: _isPlaying,
                         volume: _volume,
                         onPlayPause: () { _isPlaying ? _player.pause() : _player.play(); _keepOverlay(); },
-                        onSeek: (v) { _player.seek(Duration(seconds: (v * _duration.inSeconds).round())); _keepOverlay(); },
+                        onSeek: (v) {
+                          final pos = Duration(seconds: (v * _duration.inSeconds).round());
+                          if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
+                          _keepOverlay();
+                        },
                         onVolume: (v) { setState(() => _volume = v); _player.setVolume(v); _keepOverlay(); },
-                        onSkipBack: () { _player.seek(_position - const Duration(seconds: 10)); _keepOverlay(); },
-                        onSkipForward: () { _player.seek(_position + const Duration(seconds: 10)); _keepOverlay(); },
+                        onSkipBack: () {
+                          final pos = _position - const Duration(seconds: 10);
+                          if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
+                          _keepOverlay();
+                        },
+                        onSkipForward: () {
+                          final pos = _position + const Duration(seconds: 10);
+                          if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
+                          _keepOverlay();
+                        },
                         onCast: _showCastDialog,
                         isCasting: cast.isConnected,
                         onFullscreen: _toggleFullscreen,
@@ -493,10 +505,22 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           isPlaying: _isPlaying,
                           volume: _volume,
                           onPlayPause: () { _isPlaying ? _player.pause() : _player.play(); _keepOverlay(); },
-                          onSeek: (v) { _player.seek(Duration(seconds: (v * _duration.inSeconds).round())); _keepOverlay(); },
+                          onSeek: (v) {
+                            final pos = Duration(seconds: (v * _duration.inSeconds).round());
+                            if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
+                            _keepOverlay();
+                          },
                           onVolume: (v) { setState(() => _volume = v); _player.setVolume(v); _keepOverlay(); },
-                          onSkipBack: () { _player.seek(_position - const Duration(seconds: 10)); _keepOverlay(); },
-                          onSkipForward: () { _player.seek(_position + const Duration(seconds: 10)); _keepOverlay(); },
+                          onSkipBack: () {
+                            final pos = _position - const Duration(seconds: 10);
+                            if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
+                            _keepOverlay();
+                          },
+                          onSkipForward: () {
+                            final pos = _position + const Duration(seconds: 10);
+                            if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
+                            _keepOverlay();
+                          },
                           onCast: _showCastDialog,
                           isCasting: cast.isConnected,
                           onFullscreen: _toggleFullscreen,
