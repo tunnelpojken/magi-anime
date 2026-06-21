@@ -24,6 +24,8 @@ class CastService extends ChangeNotifier {
   String? _transportId;
   final List<int> _buffer = [];
   Timer? _heartbeatTimer;
+  Duration castPosition = Duration.zero;
+  Duration castDuration = Duration.zero;
 
   List<ChromecastDevice> get devices => _devices;
   ChromecastDevice? get connectedDevice => _connectedDevice;
@@ -135,6 +137,15 @@ class CastService extends ChangeNotifier {
           destinationId: 'receiver-0',
           payload: {'type': 'PING'},
         );
+        // Poll media status for position updates
+        if (_transportId != null) {
+          _sendMessage(
+            namespace: 'urn:x-cast:com.google.cast.media',
+            sourceId: 'sender-0',
+            destinationId: _transportId!,
+            payload: {'type': 'GET_STATUS', 'requestId': _requestId++},
+          );
+        }
       }
     });
   }
@@ -217,6 +228,19 @@ class CastService extends ChangeNotifier {
         }
       } else if (type == 'MEDIA_STATUS') {
         _isCasting = true;
+        final statuses = json['status'] as List?;
+        if (statuses != null && statuses.isNotEmpty) {
+          final status = statuses.first as Map<String, dynamic>;
+          final currentTime = status['currentTime'];
+          if (currentTime != null) {
+            castPosition = Duration(milliseconds: ((currentTime as num) * 1000).round());
+          }
+          final media = status['media'] as Map<String, dynamic>?;
+          final duration = media?['duration'];
+          if (duration != null) {
+            castDuration = Duration(milliseconds: ((duration as num) * 1000).round());
+          }
+        }
         notifyListeners();
       } else if (type == 'LOAD_FAILED') {
         _isCasting = false;
@@ -327,6 +351,8 @@ class CastService extends ChangeNotifier {
     _sessionId = null;
     _transportId = null;
     _socket = null;
+    castPosition = Duration.zero;
+    castDuration = Duration.zero;
     notifyListeners();
   }
 

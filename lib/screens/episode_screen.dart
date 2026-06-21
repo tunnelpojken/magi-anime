@@ -405,6 +405,10 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     final lastEp = saved?.episode;
     final screenH = MediaQuery.of(context).size.height;
 
+    // Use cast position/duration when casting, local player otherwise
+    final displayPosition = cast.isConnected ? cast.castPosition : _position;
+    final displayDuration = cast.isConnected ? cast.castDuration : _duration;
+
     return KeyboardListener(
       focusNode: FocusNode()..requestFocus(),
       onKeyEvent: _handleKey,
@@ -438,24 +442,24 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                     ),
                     if (_showOverlay)
                       _PlayerOverlay(
-                        position: _position,
-                        duration: _duration,
+                        position: displayPosition,
+                        duration: displayDuration,
                         isPlaying: _isPlaying,
                         volume: _volume,
                         onPlayPause: () { _isPlaying ? _player.pause() : _player.play(); _keepOverlay(); },
                         onSeek: (v) {
-                          final pos = Duration(seconds: (v * _duration.inSeconds).round());
+                          final pos = Duration(seconds: (v * displayDuration.inSeconds).round());
                           if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                           _keepOverlay();
                         },
                         onVolume: (v) { setState(() => _volume = v); _player.setVolume(v); _keepOverlay(); },
                         onSkipBack: () {
-                          final pos = _position - const Duration(seconds: 10);
+                          final pos = displayPosition - const Duration(seconds: 10);
                           if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                           _keepOverlay();
                         },
                         onSkipForward: () {
-                          final pos = _position + const Duration(seconds: 10);
+                          final pos = displayPosition + const Duration(seconds: 10);
                           if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                           _keepOverlay();
                         },
@@ -500,24 +504,24 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                       // Controls overlay
                       if (_showOverlay && !_loadingStream)
                         _PlayerOverlay(
-                          position: _position,
-                          duration: _duration,
+                          position: displayPosition,
+                          duration: displayDuration,
                           isPlaying: _isPlaying,
                           volume: _volume,
                           onPlayPause: () { _isPlaying ? _player.pause() : _player.play(); _keepOverlay(); },
                           onSeek: (v) {
-                            final pos = Duration(seconds: (v * _duration.inSeconds).round());
+                            final pos = Duration(seconds: (v * displayDuration.inSeconds).round());
                             if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                             _keepOverlay();
                           },
                           onVolume: (v) { setState(() => _volume = v); _player.setVolume(v); _keepOverlay(); },
                           onSkipBack: () {
-                            final pos = _position - const Duration(seconds: 10);
+                            final pos = displayPosition - const Duration(seconds: 10);
                             if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                             _keepOverlay();
                           },
                           onSkipForward: () {
-                            final pos = _position + const Duration(seconds: 10);
+                            final pos = displayPosition + const Duration(seconds: 10);
                             if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                             _keepOverlay();
                           },
