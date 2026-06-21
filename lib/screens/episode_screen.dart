@@ -108,7 +108,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused) {
       _player.pause();
       _saveCurrentProgress();
     }
