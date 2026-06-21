@@ -30,6 +30,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install Visual Studio Build Tools
+        uses: microsoft/setup-msbuild@v2
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.32.0'
