@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/history_service.dart';
+import '../services/cast_service.dart';
 
 const _cyan = Color(0xFF00d4d4);
 const _bg2 = Color(0xFF0f1117);
@@ -236,6 +237,67 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     _playEpisode(nextUnwatched);
   }
 
+  void _showCastDialog() async {
+    final cast = context.read<CastService>();
+    await cast.startScan();
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => Consumer<CastService>(
+        builder: (context, cast, _) => AlertDialog(
+          backgroundColor: _bg2,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          title: Row(children: [
+            const Text('CAST TO DEVICE', style: TextStyle(fontFamily: 'monospace', fontSize: 13, color: _cyan, letterSpacing: 1)),
+            const Spacer(),
+            if (cast.scanning) const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: _cyan, strokeWidth: 2)),
+          ]),
+          content: SizedBox(
+            width: 300,
+            child: cast.devices.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('NO DEVICES FOUND\nMake sure Chromecast is on the same network.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textDim, height: 1.8)),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: cast.devices.map((d) => ListTile(
+                      leading: Icon(Icons.cast, color: cast.connectedDevice == d ? _cyan : _textDim),
+                      title: Text(d.name, style: TextStyle(
+                        fontFamily: 'monospace', fontSize: 12,
+                        color: cast.connectedDevice == d ? _cyan : const Color(0xFFc8ccd8),
+                      )),
+                      onTap: () async {
+                        await cast.connect(d);
+                        if (_playingEp != null && mounted) {
+                          final api = context.read<ApiService>();
+                          final url = api.getProxyUrl(widget.anime.id, _playingEp!, widget.anime.provider, _lang);
+                          await cast.cast(url, '${widget.anime.name} EP ${_playingEp!.toInt()}');
+                          _player.pause();
+                        }
+                        if (mounted) Navigator.pop(context);
+                      },
+                    )).toList(),
+                  ),
+          ),
+          actions: [
+            if (cast.isConnected)
+              TextButton(
+                onPressed: () { cast.disconnect(); Navigator.pop(context); },
+                child: const Text('DISCONNECT', style: TextStyle(fontFamily: 'monospace', color: _red)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('CLOSE', style: TextStyle(fontFamily: 'monospace', color: _textDim)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _fmt(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -306,6 +368,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   @override
   Widget build(BuildContext context) {
     final history = context.watch<HistoryService>();
+    final cast = context.watch<CastService>();
     final saved = history.getEntry(widget.anime.id);
     final lastEp = saved?.episode;
     final screenH = MediaQuery.of(context).size.height;
@@ -340,7 +403,10 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                             ? const Center(child: CircularProgressIndicator(color: _cyan))
                             : GestureDetector(
                                 onTap: _toggleOverlay,
-                                child: Video(controller: _videoController),
+                                child: Video(
+                                  controller: _videoController,
+                                  controls: NoVideoControls,
+                                ),
                               ),
                       ),
                       // Controls overlay
@@ -355,6 +421,8 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           onVolume: (v) { setState(() => _volume = v); _player.setVolume(v); _keepOverlay(); },
                           onSkipBack: () { _player.seek(_position - const Duration(seconds: 10)); _keepOverlay(); },
                           onSkipForward: () { _player.seek(_position + const Duration(seconds: 10)); _keepOverlay(); },
+                          onCast: _showCastDialog,
+                          isCasting: cast.isConnected,
                         ),
                       // Next episode prompt
                       if (_showNextEpPrompt)
@@ -494,6 +562,8 @@ class _PlayerOverlay extends StatelessWidget {
   final ValueChanged<double> onVolume;
   final VoidCallback onSkipBack;
   final VoidCallback onSkipForward;
+  final VoidCallback onCast;
+  final bool isCasting;
 
   const _PlayerOverlay({
     required this.position,
@@ -505,6 +575,8 @@ class _PlayerOverlay extends StatelessWidget {
     required this.onVolume,
     required this.onSkipBack,
     required this.onSkipForward,
+    required this.onCast,
+    required this.isCasting,
   });
 
   String _fmt(Duration d) {
@@ -570,6 +642,12 @@ class _PlayerOverlay extends StatelessWidget {
                 onPressed: onSkipForward,
               ),
               const Spacer(),
+              // Cast button
+              IconButton(
+                icon: Icon(Icons.cast, color: isCasting ? const Color(0xFF00d4d4) : Colors.white54, size: 20),
+                onPressed: onCast,
+                tooltip: isCasting ? 'Casting' : 'Cast to device',
+              ),
               // Volume
               const Icon(Icons.volume_up, color: Colors.white54, size: 16),
               SizedBox(
