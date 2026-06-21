@@ -254,6 +254,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     final cast = context.read<CastService>();
     await cast.startScan();
     if (!mounted) return;
+    final manualController = TextEditingController();
     showDialog(
       context: context,
       builder: (_) => Consumer<CastService>(
@@ -267,33 +268,77 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
           ]),
           content: SizedBox(
             width: 300,
-            child: cast.devices.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text('NO DEVICES FOUND\nMake sure Chromecast is on the same network.',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (cast.devices.isEmpty && !cast.scanning)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: Text('NO DEVICES FOUND AUTOMATICALLY',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textDim, height: 1.8)),
-                  )
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: cast.devices.map((d) => ListTile(
-                      leading: Icon(Icons.cast, color: cast.connectedDevice == d ? _cyan : _textDim),
-                      title: Text(d.name, style: TextStyle(
-                        fontFamily: 'monospace', fontSize: 12,
-                        color: cast.connectedDevice == d ? _cyan : const Color(0xFFc8ccd8),
-                      )),
-                      onTap: () async {
-                        await cast.connect(d);
-                        if (_playingEp != null && mounted) {
-                          final api = context.read<ApiService>();
-                          final url = api.getProxyUrl(widget.anime.id, _playingEp!, widget.anime.provider, _lang);
-                          await cast.cast(url, '${widget.anime.name} EP ${_playingEp!.toInt()}');
-                          _player.pause();
-                        }
-                        if (mounted) Navigator.pop(context);
-                      },
-                    )).toList(),
+                      style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textDim)),
                   ),
+                ...cast.devices.map((d) => ListTile(
+                  leading: Icon(Icons.cast, color: cast.connectedDevice == d ? _cyan : _textDim),
+                  title: Text(d.name, style: TextStyle(
+                    fontFamily: 'monospace', fontSize: 12,
+                    color: cast.connectedDevice == d ? _cyan : const Color(0xFFc8ccd8),
+                  )),
+                  subtitle: Text(d.host, style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textDim)),
+                  onTap: () async {
+                    await cast.connect(d);
+                    if (_playingEp != null && mounted) {
+                      final api = context.read<ApiService>();
+                      final url = api.getProxyUrl(widget.anime.id, _playingEp!, widget.anime.provider, _lang);
+                      await cast.cast(url, '${widget.anime.name} EP ${_playingEp!.toInt()}');
+                      _player.pause();
+                    }
+                    if (mounted) Navigator.pop(context);
+                  },
+                )),
+                const Divider(color: _border),
+                const Text('ENTER IP MANUALLY', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textDim, letterSpacing: 2)),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(
+                    child: TextField(
+                      controller: manualController,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFFc8ccd8)),
+                      decoration: InputDecoration(
+                        hintText: '192.168.x.x',
+                        hintStyle: const TextStyle(fontFamily: 'monospace', color: _textDim, fontSize: 12),
+                        filled: true, fillColor: _bg3, isDense: true,
+                        border: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _cyan), borderRadius: BorderRadius.zero),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () async {
+                      final ip = manualController.text.trim();
+                      if (ip.isEmpty) return;
+                      final device = ChromecastDevice(name: 'Chromecast ($ip)', host: ip, port: 8009);
+                      await cast.connect(device);
+                      if (_playingEp != null && mounted) {
+                        final api = context.read<ApiService>();
+                        final url = api.getProxyUrl(widget.anime.id, _playingEp!, widget.anime.provider, _lang);
+                        await cast.cast(url, '${widget.anime.name} EP ${_playingEp!.toInt()}');
+                        _player.pause();
+                      }
+                      if (mounted) Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(border: Border.all(color: _cyan.withOpacity(0.5))),
+                      child: const Text('CONNECT', style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: _cyan)),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
           ),
           actions: [
             if (cast.isConnected)
