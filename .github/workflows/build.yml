@@ -39,3 +39,22 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: magi_anime-windows-x64.zip
+
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.0'
+      - name: Build iOS
+        run: flutter build ios --release --no-codesign
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r magi_anime-ios.ipa Payload/
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: magi_anime-ios.ipa
