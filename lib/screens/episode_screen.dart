@@ -191,10 +191,15 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     final history = context.read<HistoryService>();
     final saved = history.getEntry(widget.anime.id);
     if (saved == null) return;
-    final nextIdx = _episodes.indexWhere((e) => e > saved.episode);
-    final nextEp = nextIdx >= 0 ? _episodes[nextIdx] : null;
-    final resumeEp = nextEp ?? saved.episode;
+
     final hasProgress = saved.progress != null && saved.progress!.inSeconds > 5;
+    // Only suggest next episode if watched past 85% (~20min of 24min episode)
+    final nearComplete = saved.progress != null && saved.progress!.inSeconds > (24 * 60 * 0.85);
+
+    final nextIdx = _episodes.indexWhere((e) => e > saved.episode);
+    final nextEp = (nearComplete && nextIdx >= 0) ? _episodes[nextIdx] : null;
+    final resumeEp = nextEp ?? saved.episode;
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
