@@ -8,25 +8,32 @@ class ChromecastDevice {
   final String name;
   final String host;
   final int port;
-
   ChromecastDevice({required this.name, required this.host, required this.port});
 }
 
 class CastService extends ChangeNotifier {
   List<ChromecastDevice> _devices = [];
   ChromecastDevice? _connectedDevice;
-  Socket? _socket;
+  SecureSocket? _socket;
   bool _scanning = false;
   bool _isConnected = false;
+  bool _isCasting = false;
   int _requestId = 1;
   StreamSubscription? _socketSub;
+
+  // Session state
+  String? _sessionId;
+  String? _transportId;
+
+  // Buffer for incoming data
+  final List<int> _buffer = [];
 
   List<ChromecastDevice> get devices => _devices;
   ChromecastDevice? get connectedDevice => _connectedDevice;
   bool get isConnected => _isConnected;
+  bool get isCasting => _isCasting;
   bool get scanning => _scanning;
 
-  // Chromecast uses mDNS on port 5353 multicast group 224.0.0.251
   Future<void> startScan() async {
     _scanning = true;
     _devices = [];
@@ -34,15 +41,15 @@ class CastService extends ChangeNotifier {
 
     try {
       final multicastGroup = InternetAddress('224.0.0.251');
-      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 5353);
+      final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 5353,
+          reuseAddress: true, reusePort: true);
       socket.joinMulticast(multicastGroup);
       socket.broadcastEnabled = true;
 
-      // Send mDNS query for _googlecast._tcp.local
       final query = _buildMdnsQuery('_googlecast._tcp.local');
       socket.send(query, multicastGroup, 5353);
 
-      final timer = Timer(const Duration(seconds: 5), () {
+      Timer(const Duration(seconds: 5), () {
         socket.close();
         _scanning = false;
         notifyListeners();
@@ -60,7 +67,7 @@ class CastService extends ChangeNotifier {
           }
         }
       });
-    } catch (e) {
+    } catch (_) {
       _scanning = false;
       notifyListeners();
     }
@@ -69,22 +76,19 @@ class CastService extends ChangeNotifier {
   Uint8List _buildMdnsQuery(String name) {
     final parts = name.split('.');
     final buf = BytesBuilder();
-    // Header
     buf.add([0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
-    // Question
     for (final part in parts) {
       final bytes = utf8.encode(part);
       buf.addByte(bytes.length);
       buf.add(bytes);
     }
     buf.addByte(0x00);
-    buf.add([0x00, 0x0c, 0x00, 0x01]); // PTR, IN
+    buf.add([0x00, 0x0c, 0x00, 0x01]);
     return buf.toBytes();
   }
 
   ChromecastDevice? _parseMdnsResponse(Uint8List data, String host) {
     try {
-      // Look for friendly name in TXT records
       final str = String.fromCharCodes(data);
       final fnMatch = RegExp(r'fn=([^\x00]+)').firstMatch(str);
       final name = fnMatch?.group(1) ?? 'Chromecast ($host)';
@@ -96,95 +100,264 @@ class CastService extends ChangeNotifier {
 
   Future<bool> connect(ChromecastDevice device) async {
     try {
+      await disconnect();
       _socket = await SecureSocket.connect(
         device.host, device.port,
-        onBadCertificate: (_) => true, // Chromecast uses self-signed cert
-        timeout: const Duration(seconds: 5),
+        onBadCertificate: (_) => true,
+        timeout: const Duration(seconds: 8),
       );
       _connectedDevice = device;
       _isConnected = true;
+      _buffer.clear();
+      _sessionId = null;
+      _transportId = null;
 
-      // Send CONNECT message
-      _sendMessage('urn:x-cast:com.google.cast.tp.connection', {
-        'type': 'CONNECT', 'userAgent': 'MAGI/1.0',
-      });
-
-      // Listen for responses
       _socketSub = _socket!.listen(
         _onData,
         onError: (_) => _handleDisconnect(),
         onDone: _handleDisconnect,
       );
 
+      // Send initial CONNECT
+      _sendMessage(
+        namespace: 'urn:x-cast:com.google.cast.tp.connection',
+        sourceId: 'sender-0',
+        destinationId: 'receiver-0',
+        payload: {'type': 'CONNECT', 'userAgent': 'MAGI/1.0'},
+      );
+
+      // Start heartbeat
+      _startHeartbeat();
+
       notifyListeners();
       return true;
-    } catch (e) {
+    } catch (_) {
       _isConnected = false;
       notifyListeners();
       return false;
     }
   }
 
+  Timer? _heartbeatTimer;
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (_isConnected) {
+        _sendMessage(
+          namespace: 'urn:x-cast:com.google.cast.tp.heartbeat',
+          sourceId: 'sender-0',
+          destinationId: 'receiver-0',
+          payload: {'type': 'PING'},
+        );
+      }
+    });
+  }
+
   void _onData(List<int> data) {
-    // Handle incoming Cast messages (keepalive PING/PONG)
+    _buffer.addAll(data);
+    _processBuffer();
+  }
+
+  void _processBuffer() {
+    while (_buffer.length >= 4) {
+      final msgLen = ByteData.sublistView(
+        Uint8List.fromList(_buffer.sublist(0, 4))
+      ).getUint32(0);
+
+      if (_buffer.length < 4 + msgLen) break;
+
+      final msgData = _buffer.sublist(4, 4 + msgLen);
+      _buffer.removeRange(0, 4 + msgLen);
+
+      try {
+        _handleMessage(Uint8List.fromList(msgData));
+      } catch (_) {}
+    }
+  }
+
+  void _handleMessage(Uint8List data) {
+    // Parse protobuf manually to extract payload_utf8 (field 6)
+    String? payload;
+    int pos = 0;
+    while (pos < data.length) {
+      final tag = data[pos] & 0xFF;
+      final fieldNum = tag >> 3;
+      final wireType = tag & 0x07;
+      pos++;
+
+      if (wireType == 0) {
+        // Varint
+        int val = 0, shift = 0;
+        while (pos < data.length) {
+          final b = data[pos++];
+          val |= (b & 0x7F) << shift;
+          if ((b & 0x80) == 0) break;
+          shift += 7;
+        }
+        // ignore: unused_local_variable
+        // varint value, not needed
+      } else if (wireType == 2) {
+        // Length-delimited
+        int len = 0, shift = 0;
+        while (pos < data.length) {
+          final b = data[pos++];
+          len |= (b & 0x7F) << shift;
+          if ((b & 0x80) == 0) break;
+          shift += 7;
+        }
+        final bytes = data.sublist(pos, pos + len);
+        pos += len;
+        if (fieldNum == 6) {
+          payload = utf8.decode(bytes, allowMalformed: true);
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (payload == null) return;
+
     try {
-      if (data.length > 4) {
-        final msgLen = ByteData.sublistView(Uint8List.fromList(data), 0, 4).getUint32(0);
-        if (data.length >= 4 + msgLen) {
-          final msgData = data.sublist(4, 4 + msgLen);
-          final msgStr = utf8.decode(msgData, allowMalformed: true);
-          if (msgStr.contains('"PING"')) {
-            _sendMessage('urn:x-cast:com.google.cast.tp.heartbeat', {'type': 'PONG'});
+      final json = jsonDecode(payload) as Map<String, dynamic>;
+      final type = json['type'] as String?;
+
+      if (type == 'PING') {
+        _sendMessage(
+          namespace: 'urn:x-cast:com.google.cast.tp.heartbeat',
+          sourceId: 'sender-0',
+          destinationId: 'receiver-0',
+          payload: {'type': 'PONG'},
+        );
+      } else if (type == 'RECEIVER_STATUS') {
+        // Extract session and transport IDs
+        final status = json['status'] as Map<String, dynamic>?;
+        final apps = status?['applications'] as List?;
+        if (apps != null && apps.isNotEmpty) {
+          final app = apps.first as Map<String, dynamic>;
+          _sessionId = app['sessionId'] as String?;
+          _transportId = app['transportId'] as String?;
+
+          if (_transportId != null && _sessionId != null) {
+            // Connect to the app transport
+            _sendMessage(
+              namespace: 'urn:x-cast:com.google.cast.tp.connection',
+              sourceId: 'sender-0',
+              destinationId: _transportId!,
+              payload: {'type': 'CONNECT', 'userAgent': 'MAGI/1.0'},
+            );
+            // Signal that we're ready to send LOAD
+            notifyListeners();
           }
         }
+      } else if (type == 'MEDIA_STATUS') {
+        _isCasting = true;
+        notifyListeners();
+      } else if (type == 'LOAD_FAILED') {
+        _isCasting = false;
+        notifyListeners();
       }
     } catch (_) {}
   }
 
-  void _handleDisconnect() {
-    _isConnected = false;
-    _connectedDevice = null;
-    _socket = null;
+  Future<void> cast(String url, String title) async {
+    if (!_isConnected) return;
+
+    _isCasting = false;
+    _sessionId = null;
+    _transportId = null;
+
+    final id = _requestId++;
+
+    // Launch default media receiver app
+    _sendMessage(
+      namespace: 'urn:x-cast:com.google.cast.receiver',
+      sourceId: 'sender-0',
+      destinationId: 'receiver-0',
+      payload: {
+        'type': 'LAUNCH',
+        'appId': 'CC1AD845',
+        'requestId': id,
+      },
+    );
+
+    // Wait for RECEIVER_STATUS with transportId then send LOAD
+    // We poll until transportId is set (max 10 seconds)
+    for (int i = 0; i < 20; i++) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (_transportId != null) break;
+    }
+
+    if (_transportId == null) return;
+
+    _sendMessage(
+      namespace: 'urn:x-cast:com.google.cast.media',
+      sourceId: 'sender-0',
+      destinationId: _transportId!,
+      payload: {
+        'type': 'LOAD',
+        'requestId': _requestId++,
+        'sessionId': _sessionId,
+        'media': {
+          'contentId': url,
+          'contentType': 'video/mp4',
+          'streamType': 'BUFFERED',
+          'metadata': {
+            'metadataType': 0,
+            'title': title,
+          },
+        },
+        'autoplay': true,
+        'currentTime': 0,
+      },
+    );
+
     notifyListeners();
   }
 
-  void _sendMessage(String namespace, Map<String, dynamic> payload) {
+  void _sendMessage({
+    required String namespace,
+    required String sourceId,
+    required String destinationId,
+    required Map<String, dynamic> payload,
+  }) {
     if (_socket == null) return;
     try {
-      final payloadStr = jsonEncode(payload);
-      final payloadBytes = utf8.encode(payloadStr);
-
-      // Cast protocol message format
-      final msg = _buildCastMessage(namespace, payloadBytes);
+      final payloadBytes = utf8.encode(jsonEncode(payload));
+      final msg = _buildCastMessage(namespace, sourceId, destinationId, payloadBytes);
       final lenBytes = ByteData(4)..setUint32(0, msg.length);
       _socket!.add(lenBytes.buffer.asUint8List());
       _socket!.add(msg);
     } catch (_) {}
   }
 
-  Uint8List _buildCastMessage(String namespace, List<int> payload) {
-    // Simplified protobuf encoding for Cast protocol
+  Uint8List _buildCastMessage(
+    String namespace, String sourceId, String destinationId, List<int> payload,
+  ) {
     final buf = BytesBuilder();
-    // Field 1: protocol_version = 0
-    buf.add([0x08, 0x00]);
-    // Field 2: source_id = "sender-0"
-    final src = utf8.encode('sender-0');
-    buf.add([0x12, src.length]);
-    buf.add(src);
-    // Field 3: destination_id = "receiver-0"
-    final dst = utf8.encode('receiver-0');
-    buf.add([0x1a, dst.length]);
-    buf.add(dst);
+
+    void writeField(int fieldNum, int wireType, List<int> data) {
+      buf.addByte((fieldNum << 3) | wireType);
+      if (wireType == 2) {
+        _writeVarint(buf, data.length);
+        buf.add(data);
+      } else if (wireType == 0) {
+        buf.add(data);
+      }
+    }
+
+    // Field 1: protocol_version = 0 (varint)
+    writeField(1, 0, [0x00]);
+    // Field 2: source_id
+    writeField(2, 2, utf8.encode(sourceId));
+    // Field 3: destination_id
+    writeField(3, 2, utf8.encode(destinationId));
     // Field 4: namespace
-    final ns = utf8.encode(namespace);
-    buf.add([0x22, ns.length]);
-    buf.add(ns);
+    writeField(4, 2, utf8.encode(namespace));
     // Field 5: payload_type = STRING (0)
-    buf.add([0x28, 0x00]);
+    writeField(5, 0, [0x00]);
     // Field 6: payload_utf8
-    buf.add([0x32]);
-    _writeVarint(buf, payload.length);
-    buf.add(payload);
+    writeField(6, 2, payload);
+
     return buf.toBytes();
   }
 
@@ -196,34 +369,29 @@ class CastService extends ChangeNotifier {
     buf.addByte(value);
   }
 
-  Future<void> cast(String url, String title) async {
-    if (!_isConnected) return;
-    final id = _requestId++;
-    // Launch default media receiver
-    _sendMessage('urn:x-cast:com.google.cast.receiver', {
-      'type': 'LAUNCH',
-      'appId': 'CC1AD845',
-      'requestId': id,
-    });
-    await Future.delayed(const Duration(milliseconds: 1000));
-    // Load media
-    _sendMessage('urn:x-cast:com.google.cast.media', {
-      'type': 'LOAD',
-      'requestId': _requestId++,
-      'media': {
-        'contentId': url,
-        'contentType': 'video/mp4',
-        'streamType': 'BUFFERED',
-        'metadata': {'metadataType': 0, 'title': title},
-      },
-      'autoplay': true,
-      'currentTime': 0,
-    });
+  void _handleDisconnect() {
+    _heartbeatTimer?.cancel();
+    _isConnected = false;
+    _isCasting = false;
+    _connectedDevice = null;
+    _sessionId = null;
+    _transportId = null;
+    _socket = null;
     notifyListeners();
   }
 
   Future<void> disconnect() async {
-    _sendMessage('urn:x-cast:com.google.cast.tp.connection', {'type': 'CLOSE'});
+    if (_socket != null) {
+      try {
+        _sendMessage(
+          namespace: 'urn:x-cast:com.google.cast.tp.connection',
+          sourceId: 'sender-0',
+          destinationId: 'receiver-0',
+          payload: {'type': 'CLOSE'},
+        );
+      } catch (_) {}
+    }
+    _heartbeatTimer?.cancel();
     await _socketSub?.cancel();
     await _socket?.close();
     _handleDisconnect();
