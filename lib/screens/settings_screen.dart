@@ -145,9 +145,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               fontFamily: 'monospace', fontSize: 11, color: _textDim, letterSpacing: 3,
             )),
             const SizedBox(height: 12),
-            Text('MAGI // ANIME TERMINAL\nv$magiVersion', style: const TextStyle(
-              fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8,
-            )),
+            FutureBuilder<String>(
+              future: getMagiVersion(),
+              builder: (context, snap) {
+                final version = snap.data ?? '...';
+                return Text('MAGI // ANIME TERMINAL\nv$version', style: const TextStyle(
+                  fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8,
+                ));
+              },
+            ),
           ],
         ),
       ),

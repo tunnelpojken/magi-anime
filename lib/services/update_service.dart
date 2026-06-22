@@ -2,19 +2,26 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-const magiVersion = '1.1.7';
-const _currentVersion = magiVersion;
 const _githubRepo = 'tunnelpojken/magi-anime';
 const _cyan = Color(0xFF00d4d4);
 const _bg2 = Color(0xFF0f1117);
 const _textDim = Color(0xFF5a6080);
 const _border = Color(0xFF1e2130);
 
+// Reads version from pubspec.yaml automatically
+Future<String> getMagiVersion() async {
+  final info = await PackageInfo.fromPlatform();
+  return info.version;
+}
+
 class UpdateService {
   static Future<void> checkForUpdates(BuildContext context) async {
     try {
+      final currentVersion = await getMagiVersion();
+
       final res = await http.get(
         Uri.parse('https://api.github.com/repos/$_githubRepo/releases/latest'),
         headers: {'Accept': 'application/vnd.github.v3+json'},
@@ -27,20 +34,19 @@ class UpdateService {
       final releaseUrl = data['html_url'] as String;
       final assets = data['assets'] as List? ?? [];
 
-      if (!_isNewer(latestTag, _currentVersion)) return;
+      if (!_isNewer(latestTag, currentVersion)) return;
+      if (!context.mounted) return;
       if (!context.mounted) return;
 
       if (Platform.isLinux) {
-        // Find Linux tarball asset
         final linuxAsset = assets.firstWhere(
           (a) => (a['name'] as String).contains('linux'),
           orElse: () => null,
         );
         final downloadUrl = linuxAsset?['browser_download_url'] as String?;
-        _showLinuxUpdateDialog(context, latestTag, downloadUrl);
+        _showLinuxUpdateDialog(context, latestTag, downloadUrl, currentVersion);
       } else {
-        // Windows/Android — just notify
-        _showNotifyDialog(context, latestTag, releaseUrl);
+        _showNotifyDialog(context, latestTag, releaseUrl, currentVersion);
       }
     } catch (_) {}
   }
@@ -57,7 +63,7 @@ class UpdateService {
     return false;
   }
 
-  static void _showNotifyDialog(BuildContext context, String version, String url) {
+  static void _showNotifyDialog(BuildContext context, String version, String url, String currentVersion) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -66,7 +72,7 @@ class UpdateService {
         title: Text('UPDATE AVAILABLE — v$version',
           style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: _cyan, letterSpacing: 1)),
         content: Text(
-          'A new version of MAGI is available.\nCurrent: v$_currentVersion\nLatest: v$version',
+          'A new version of MAGI is available.\nCurrent: v$currentVersion\nLatest: v$version',
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8),
         ),
         actions: [
@@ -88,11 +94,11 @@ class UpdateService {
     );
   }
 
-  static void _showLinuxUpdateDialog(BuildContext context, String version, String? downloadUrl) {
+  static void _showLinuxUpdateDialog(BuildContext context, String version, String? downloadUrl, String currentVersion) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _LinuxUpdateDialog(version: version, downloadUrl: downloadUrl),
+      builder: (ctx) => _LinuxUpdateDialog(version: version, downloadUrl: downloadUrl, currentVersion: currentVersion),
     );
   }
 }
@@ -100,7 +106,8 @@ class UpdateService {
 class _LinuxUpdateDialog extends StatefulWidget {
   final String version;
   final String? downloadUrl;
-  const _LinuxUpdateDialog({required this.version, required this.downloadUrl});
+  final String currentVersion;
+  const _LinuxUpdateDialog({required this.version, required this.downloadUrl, required this.currentVersion});
 
   @override
   State<_LinuxUpdateDialog> createState() => _LinuxUpdateDialogState();
@@ -183,7 +190,7 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
                 Text(_status, style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textDim)),
               ])
             : Text(
-                'Current: v$_currentVersion\nLatest: v${widget.version}\n\nMAGI will update and restart automatically.',
+                'Current: v\${widget.currentVersion}\nLatest: v\${widget.version}\n\nMAGI will update and restart automatically.',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8),
               ),
       ),
