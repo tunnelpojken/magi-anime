@@ -259,24 +259,45 @@ class CastService extends ChangeNotifier {
 
   Future<void> cast(String url, String title) async {
     if (!_isConnected) return;
+
+    // If already casting, stop current media first before loading new one
+    if (_isCasting && _transportId != null && _mediaSessionId != null) {
+      _sendMessage(
+        namespace: 'urn:x-cast:com.google.cast.media',
+        sourceId: 'sender-0',
+        destinationId: _transportId!,
+        payload: {
+          'type': 'STOP',
+          'requestId': _requestId++,
+          'mediaSessionId': _mediaSessionId,
+        },
+      );
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
     _isCasting = false;
-    _sessionId = null;
-    _transportId = null;
     _mediaSessionId = null;
     castPosition = Duration.zero;
     castDuration = Duration.zero;
-    final id = _requestId++;
-    _sendMessage(
-      namespace: 'urn:x-cast:com.google.cast.receiver',
-      sourceId: 'sender-0',
-      destinationId: 'receiver-0',
-      payload: {'type': 'LAUNCH', 'appId': 'CC1AD845', 'requestId': id},
-    );
-    for (int i = 0; i < 20; i++) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (_transportId != null) break;
+
+    // If we don't have a transport ID yet, launch the app first
+    if (_transportId == null) {
+      _sessionId = null;
+      final id = _requestId++;
+      _sendMessage(
+        namespace: 'urn:x-cast:com.google.cast.receiver',
+        sourceId: 'sender-0',
+        destinationId: 'receiver-0',
+        payload: {'type': 'LAUNCH', 'appId': 'CC1AD845', 'requestId': id},
+      );
+      for (int i = 0; i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (_transportId != null) break;
+      }
+      if (_transportId == null) return;
     }
-    if (_transportId == null) return;
+
+    // Load new media
     _sendMessage(
       namespace: 'urn:x-cast:com.google.cast.media',
       sourceId: 'sender-0',
