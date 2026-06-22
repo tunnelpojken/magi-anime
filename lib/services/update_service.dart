@@ -149,7 +149,7 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
       final result = await Process.run('sudo', ['cp', '-r', '$bundlePath/.', '/opt/magi-anime/']);
 
       if (result.exitCode != 0) {
-        setState(() { _status = 'ERROR: Need sudo. Run manually:\nsudo cp -r $bundlePath/. /opt/magi-anime/'; });
+        setState(() { _status = 'ERROR: Auth failed. Run manually:\nsudo cp -r $bundlePath/. /opt/magi-anime/'; });
         return;
       }
 

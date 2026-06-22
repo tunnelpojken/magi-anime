@@ -43,7 +43,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin, WindowListener {
   late TabController _tabController;
   final _searchController = TextEditingController();
   String _provider = 'allanime';
@@ -53,20 +53,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String? _searchError;
   final Map<String, List<AnilistMedia>> _browseCache = {};
   final Map<String, String> _browseErrors = {};
+  bool _isMaximized = false;
 
   @override
   void initState() {
     super.initState();
+    windowManager.addListener(this);
     _tabController = TabController(length: 3, vsync: this);
     _loadBrowse();
-    // Check for updates after a short delay so UI loads first
+    windowManager.isMaximized().then((v) => setState(() => _isMaximized = v));
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) UpdateService.checkForUpdates(context);
     });
   }
 
   @override
+  void onWindowMaximize() => setState(() => _isMaximized = true);
+
+  @override
+  void onWindowUnmaximize() => setState(() => _isMaximized = false);
+
+  @override
   void dispose() {
+    windowManager.removeListener(this);
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -152,10 +161,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60),
+        preferredSize: const Size.fromHeight(72),
         child: DragToMoveArea(
           child: AppBar(
-            toolbarHeight: 44,
+            toolbarHeight: 40,
             centerTitle: true,
             automaticallyImplyLeading: false,
             title: const Text('MAGI', style: TextStyle(
@@ -166,20 +175,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               color: _cyan,
             )),
             actions: [
-              IconButton(
-                iconSize: 18,
-                icon: const Icon(Icons.remove, color: _textDim),
-                onPressed: () => windowManager.minimize(),
+              // Window controls
+              _WinBtn(icon: Icons.remove, onTap: () => windowManager.minimize()),
+              _WinBtn(
+                icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
+                onTap: () async {
+                  if (_isMaximized) { await windowManager.unmaximize(); }
+                  else { await windowManager.maximize(); }
+                },
               ),
-              IconButton(
-                iconSize: 18,
-                icon: const Icon(Icons.close, color: _textDim),
-                onPressed: () => windowManager.close(),
-              ),
-              const SizedBox(width: 4),
+              _WinBtn(icon: Icons.close, onTap: () => windowManager.close(), isClose: true),
+              const SizedBox(width: 6),
             ],
             bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(16),
+              preferredSize: const Size.fromHeight(32),
               child: Stack(
                 alignment: Alignment.centerRight,
                 children: [
@@ -193,19 +202,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     labelStyle: const TextStyle(fontFamily: 'monospace', fontSize: 11, letterSpacing: 2),
                     tabs: const [Tab(text: 'BROWSE'), Tab(text: 'SEARCH'), Tab(text: 'WATCHLIST')],
                   ),
-                  IconButton(
-                    iconSize: 16,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    icon: const Icon(Icons.calendar_month, color: _textDim),
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => SeasonalScreen(provider: _provider),
-                    )),
-                  ),
-                  IconButton(
-                    iconSize: 16,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    icon: const Icon(Icons.settings, color: _textDim),
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        iconSize: 16,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        icon: const Icon(Icons.calendar_month, color: _textDim),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => SeasonalScreen(provider: _provider),
+                        )),
+                      ),
+                      IconButton(
+                        iconSize: 16,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        icon: const Icon(Icons.settings, color: _textDim),
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -669,6 +683,48 @@ class _ScrollableRowState extends State<_ScrollableRow> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _WinBtn extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isClose;
+  const _WinBtn({required this.icon, required this.onTap, this.isClose = false});
+
+  @override
+  State<_WinBtn> createState() => _WinBtnState();
+}
+
+class _WinBtnState extends State<_WinBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 32,
+          height: 32,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? widget.isClose
+                    ? const Color(0xFFc0392b).withOpacity(0.8)
+                    : _cyan.withOpacity(0.15)
+                : Colors.transparent,
+          ),
+          child: Icon(widget.icon, size: 14,
+            color: _hovered
+                ? widget.isClose ? Colors.white : _cyan
+                : _textDim),
+        ),
       ),
     );
   }
