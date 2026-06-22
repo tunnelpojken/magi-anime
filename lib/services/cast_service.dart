@@ -373,6 +373,28 @@ class CastService extends ChangeNotifier {
   Future<void> disconnect() async {
     if (_socket != null) {
       try {
+        // Stop media playback on the receiver
+        if (_transportId != null && _mediaSessionId != null) {
+          _sendMessage(
+            namespace: 'urn:x-cast:com.google.cast.media',
+            sourceId: 'sender-0',
+            destinationId: _transportId!,
+            payload: {
+              'type': 'STOP',
+              'requestId': _requestId++,
+              'mediaSessionId': _mediaSessionId,
+            },
+          );
+        }
+        // Stop the receiver app
+        _sendMessage(
+          namespace: 'urn:x-cast:com.google.cast.receiver',
+          sourceId: 'sender-0',
+          destinationId: 'receiver-0',
+          payload: {'type': 'STOP', 'requestId': _requestId++},
+        );
+        await Future.delayed(const Duration(milliseconds: 300));
+        // Close the connection
         _sendMessage(
           namespace: 'urn:x-cast:com.google.cast.tp.connection',
           sourceId: 'sender-0',
