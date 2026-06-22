@@ -22,6 +22,7 @@ class CastService extends ChangeNotifier {
   StreamSubscription? _socketSub;
   String? _sessionId;
   String? _transportId;
+  int? _mediaSessionId;
   final List<int> _buffer = [];
   Timer? _heartbeatTimer;
   Duration castPosition = Duration.zero;
@@ -231,6 +232,7 @@ class CastService extends ChangeNotifier {
         final statuses = json['status'] as List?;
         if (statuses != null && statuses.isNotEmpty) {
           final status = statuses.first as Map<String, dynamic>;
+          _mediaSessionId = status['mediaSessionId'] as int?;
           final currentTime = status['currentTime'];
           if (currentTime != null) {
             castPosition = Duration(milliseconds: ((currentTime as num) * 1000).round());
@@ -254,6 +256,9 @@ class CastService extends ChangeNotifier {
     _isCasting = false;
     _sessionId = null;
     _transportId = null;
+    _mediaSessionId = null;
+    castPosition = Duration.zero;
+    castDuration = Duration.zero;
     final id = _requestId++;
     _sendMessage(
       namespace: 'urn:x-cast:com.google.cast.receiver',
@@ -288,7 +293,7 @@ class CastService extends ChangeNotifier {
   }
 
   Future<void> seek(Duration position) async {
-    if (!_isConnected || _transportId == null) return;
+    if (!_isConnected || _transportId == null || _mediaSessionId == null) return;
     _sendMessage(
       namespace: 'urn:x-cast:com.google.cast.media',
       sourceId: 'sender-0',
@@ -296,6 +301,7 @@ class CastService extends ChangeNotifier {
       payload: {
         'type': 'SEEK',
         'requestId': _requestId++,
+        'mediaSessionId': _mediaSessionId,
         'currentTime': position.inSeconds,
         'resumeState': 'PLAYBACK_START',
       },
@@ -350,6 +356,7 @@ class CastService extends ChangeNotifier {
     _connectedDevice = null;
     _sessionId = null;
     _transportId = null;
+    _mediaSessionId = null;
     _socket = null;
     castPosition = Duration.zero;
     castDuration = Duration.zero;
