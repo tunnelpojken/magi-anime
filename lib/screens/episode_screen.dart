@@ -82,6 +82,21 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     _searchController.addListener(_filterEpisodes);
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Listen to cast service for position updates when casting
+    context.read<CastService>().addListener(_onCastUpdate);
+  }
+
+  void _onCastUpdate() {
+    if (!mounted) return;
+    final cast = context.read<CastService>();
+    if (cast.isConnected) {
+      _checkNextEpTiming(cast.castPosition);
+    }
+  }
+
   void _setupPlayerListeners() {
     _posSub = _player.stream.position.listen((pos) {
       if (mounted) {
@@ -175,6 +190,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    context.read<CastService>().removeListener(_onCastUpdate);
     _progressTimer?.cancel();
     _overlayTimer?.cancel();
     _nextEpTimer?.cancel();
@@ -373,6 +389,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                       final url = api.getProxyUrl(widget.anime.id, _playingEp!, widget.anime.provider, _lang);
                       await cast.cast(url, '${widget.anime.name} EP ${_playingEp!.toInt()}');
                       _player.pause();
+                      await _player.stop();
                     }
                     if (mounted) Navigator.pop(context);
                   },
@@ -408,6 +425,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         final url = api.getProxyUrl(widget.anime.id, _playingEp!, widget.anime.provider, _lang);
                         await cast.cast(url, '${widget.anime.name} EP ${_playingEp!.toInt()}');
                         _player.pause();
+                        await _player.stop();
                       }
                       if (mounted) Navigator.pop(context);
                     },
@@ -510,6 +528,9 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
       if (cast.isConnected) {
         await cast.cast(proxyUrl, title);
         await history.save(widget.anime.id, widget.anime.name, widget.anime.provider, ep, _lang);
+        // Stop local playback completely
+        _player.pause();
+        await _player.stop();
         if (mounted) setState(() { _loadingStream = false; _playerReady = false; });
         _scrollToEpisode(ep);
         return;
