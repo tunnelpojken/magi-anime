@@ -275,6 +275,7 @@ class _BrowseTab extends StatelessWidget {
                     height: 90,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
+                      primary: false,
                       itemCount: history.entries.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (context, i) {
@@ -323,6 +324,7 @@ class _BrowseTab extends StatelessWidget {
                         : browseCache.containsKey(row['label'])
                             ? ListView.separated(
                                 scrollDirection: Axis.horizontal,
+                                primary: false,
                                 itemCount: browseCache[row['label']]!.length,
                                 separatorBuilder: (_, __) => const SizedBox(width: 10),
                                 itemBuilder: (context, i) {
@@ -332,6 +334,7 @@ class _BrowseTab extends StatelessWidget {
                               )
                             : ListView.separated(
                                 scrollDirection: Axis.horizontal,
+                                primary: false,
                                 itemCount: 10,
                                 separatorBuilder: (_, __) => const SizedBox(width: 10),
                                 itemBuilder: (_, __) => const ShimmerBrowseCard(),
