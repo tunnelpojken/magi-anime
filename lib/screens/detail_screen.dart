@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/history_service.dart';
 import '../services/watchlist_service.dart';
 import 'episode_screen.dart';
 
@@ -19,6 +20,7 @@ class DetailScreen extends StatelessWidget {
 
   void _watch(BuildContext context) async {
     final api = context.read<ApiService>();
+    final history = context.read<HistoryService>();
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -32,7 +34,10 @@ class DetailScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No results found on provider')));
         return;
       }
-      Navigator.push(context, MaterialPageRoute(builder: (_) => EpisodeScreen(anime: results.first, anilistMedia: media)));
+      final anime = results.first;
+      final saved = history.getEntry(anime.id);
+      final screen = EpisodeScreen(anime: anime, anilistMedia: media, autoPlay: saved?.episode ?? 1.0, autoPlayResume: saved?.progress);
+      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);

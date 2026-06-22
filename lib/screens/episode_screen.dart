@@ -20,7 +20,9 @@ const _red = Color(0xFFd44000);
 class EpisodeScreen extends StatefulWidget {
   final AnimeResult anime;
   final AnilistMedia? anilistMedia;
-  const EpisodeScreen({super.key, required this.anime, this.anilistMedia});
+  final double? autoPlay;
+  final Duration? autoPlayResume;
+  const EpisodeScreen({super.key, required this.anime, this.anilistMedia, this.autoPlay, this.autoPlayResume});
 
   @override
   State<EpisodeScreen> createState() => _EpisodeScreenState();
@@ -49,6 +51,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   bool _isPlaying = false;
   double _volume = 100;
   bool _isFullscreen = false;
+  bool _showCursor = true;
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
   StreamSubscription? _playSub;
@@ -138,8 +141,8 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     if (_showNextEpPrompt || _playingEp == null) return;
     if (_duration.inSeconds <= 0) return;
     final remaining = _duration.inSeconds - pos.inSeconds;
-    // Show next episode prompt ~90 seconds before end
-    if (remaining > 0 && remaining <= 90) {
+    // Show next episode prompt 30 seconds before end
+    if (remaining > 0 && remaining <= 30) {
       final idx = _episodes.indexOf(_playingEp!);
       if (idx >= 0 && idx < _episodes.length - 1) {
         _onEpisodeComplete();
@@ -198,20 +201,26 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   }
 
   void _toggleOverlay() {
-    setState(() => _showOverlay = !_showOverlay);
+    setState(() { _showOverlay = !_showOverlay; _showCursor = _showOverlay; });
     if (_showOverlay) {
       _overlayTimer?.cancel();
       _overlayTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _showOverlay = false);
+        if (mounted) setState(() { _showOverlay = false; _showCursor = false; });
       });
     }
   }
 
   void _keepOverlay() {
+    setState(() { _showCursor = true; });
     _overlayTimer?.cancel();
     _overlayTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _showOverlay = false);
+      if (mounted) setState(() { _showOverlay = false; _showCursor = false; });
     });
+  }
+
+  void _onMouseMove() {
+    if (!_showOverlay) setState(() { _showOverlay = true; _showCursor = true; });
+    _keepOverlay();
   }
 
   Future<void> _toggleFullscreen() async {
@@ -231,7 +240,17 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
       final api = context.read<ApiService>();
       final eps = await api.getEpisodes(widget.anime.id, widget.anime.provider, _lang);
       setState(() { _episodes = eps; _filtered = eps; _loading = false; });
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkAutoResume());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (widget.autoPlay != null) {
+          final ep = _episodes.firstWhere(
+            (e) => e == widget.autoPlay || e.toInt() == widget.autoPlay!.toInt(),
+            orElse: () => _episodes.first,
+          );
+          _playEpisode(ep, resumeFrom: widget.autoPlayResume);
+        } else {
+          _checkAutoResume();
+        }
+      });
     } catch (e) {
       setState(() { _error = e.toString(); _loading = false; });
     }
@@ -532,9 +551,13 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                   children: [
                     Container(
                       color: Colors.black,
-                      child: GestureDetector(
-                        onTap: _toggleOverlay,
-                        child: Video(controller: _videoController, controls: NoVideoControls),
+                      child: MouseRegion(
+                        cursor: _showCursor ? SystemMouseCursors.basic : SystemMouseCursors.none,
+                        onHover: (_) => _onMouseMove(),
+                        child: GestureDetector(
+                          onTap: _toggleOverlay,
+                          child: Video(controller: _videoController, controls: NoVideoControls),
+                        ),
                       ),
                     ),
                     if (_showOverlay)
@@ -545,6 +568,12 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         volume: _volume,
                         onPlayPause: () { _isPlaying ? _player.pause() : _player.play(); _keepOverlay(); },
                         onSeek: (v) {
+                          // Only update local UI while dragging
+                          setState(() => _position = Duration(seconds: (v * displayDuration.inSeconds).round()));
+                          _keepOverlay();
+                        },
+                        onSeekEnd: (v) {
+                          // Actually seek when drag ends
                           final pos = Duration(seconds: (v * displayDuration.inSeconds).round());
                           if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                           _keepOverlay();
@@ -603,12 +632,16 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         color: Colors.black,
                         child: _loadingStream
                             ? const Center(child: CircularProgressIndicator(color: _cyan))
-                            : GestureDetector(
-                                onTap: _toggleOverlay,
-                                child: Video(
-                                  controller: _videoController,
+                            : MouseRegion(
+                                cursor: _showCursor ? SystemMouseCursors.basic : SystemMouseCursors.none,
+                                onHover: (_) => _onMouseMove(),
+                                child: GestureDetector(
+                                  onTap: _toggleOverlay,
+                                  child: Video(
+                                    controller: _videoController,
                                   controls: NoVideoControls,
                                 ),
+                              ),
                               ),
                       ),
                       // Controls overlay
@@ -620,6 +653,10 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           volume: _volume,
                           onPlayPause: () { _isPlaying ? _player.pause() : _player.play(); _keepOverlay(); },
                           onSeek: (v) {
+                            setState(() => _position = Duration(seconds: (v * displayDuration.inSeconds).round()));
+                            _keepOverlay();
+                          },
+                          onSeekEnd: (v) {
                             final pos = Duration(seconds: (v * displayDuration.inSeconds).round());
                             if (cast.isConnected) { cast.seek(pos); } else { _player.seek(pos); }
                             _keepOverlay();
@@ -806,6 +843,7 @@ class _PlayerOverlay extends StatelessWidget {
   final double volume;
   final VoidCallback onPlayPause;
   final ValueChanged<double> onSeek;
+  final ValueChanged<double> onSeekEnd;
   final ValueChanged<double> onVolume;
   final VoidCallback onSkipBack;
   final VoidCallback onSkipForward;
@@ -822,6 +860,7 @@ class _PlayerOverlay extends StatelessWidget {
     required this.volume,
     required this.onPlayPause,
     required this.onSeek,
+    required this.onSeekEnd,
     required this.onVolume,
     required this.onSkipBack,
     required this.onSkipForward,
@@ -869,7 +908,11 @@ class _PlayerOverlay extends StatelessWidget {
                     thumbColor: const Color(0xFF00d4d4),
                     overlayColor: const Color(0xFF00d4d4).withOpacity(0.2),
                   ),
-                  child: Slider(value: progress.clamp(0.0, 1.0), onChanged: onSeek),
+                  child: Slider(
+                    value: progress.clamp(0.0, 1.0),
+                    onChanged: onSeek,
+                    onChangeEnd: onSeekEnd,
+                  ),
                 ),
               ),
               Text(_fmt(duration), style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.white70)),
