@@ -4,6 +4,7 @@ import 'package:window_manager/window_manager.dart';
 import '../services/api_service.dart';
 import '../services/history_service.dart';
 import '../services/watchlist_service.dart';
+import '../services/update_service.dart';
 import '../models/models.dart';
 import '../widgets/anime_card.dart';
 import '../widgets/browse_card.dart';
@@ -58,6 +59,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadBrowse();
+    // Check for updates after a short delay so UI loads first
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) UpdateService.checkForUpdates(context);
+    });
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/update_service.dart';
 
 const _cyan = Color(0xFF00d4d4);
 const _bg2 = Color(0xFF0f1117);
@@ -144,7 +145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               fontFamily: 'monospace', fontSize: 11, color: _textDim, letterSpacing: 3,
             )),
             const SizedBox(height: 12),
-            const Text('MAGI // ANIME TERMINAL\nv1.0.0', style: TextStyle(
+            Text('MAGI // ANIME TERMINAL\nv$magiVersion', style: const TextStyle(
               fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8,
             )),
           ],
