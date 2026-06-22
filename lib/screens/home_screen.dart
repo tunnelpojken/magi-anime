@@ -17,28 +17,29 @@ import 'seasonal_screen.dart';
 import 'watchlist_screen.dart';
 
 const _cyan = Color(0xFF00d4d4);
-const _bg2 = Color(0xFF0f1117);
-const _bg3 = Color(0xFF151720);
+const _bg = Color(0xFF0a0b0f);
+const _bg2 = Color(0xFF111827);
+const _bg3 = Color(0xFF0d0f18);
 const _border = Color(0xFF1e2130);
-const _textDim = Color(0xFF5a6080);
+const _textPrimary = Color(0xFFe2e8f0);
+const _textSecondary = Color(0xFF94a3b8);
+const _textMuted = Color(0xFF475569);
 
 const _browseRows = [
-  {'label': 'CURRENTLY AIRING', 'query': 'status: RELEASING, sort: POPULARITY_DESC'},
-  {'label': 'TRENDING NOW', 'query': 'sort: TRENDING_DESC'},
-  {'label': 'ALL TIME POPULAR', 'query': 'sort: POPULARITY_DESC'},
-  {'label': 'ACTION', 'query': 'genre: "Action", sort: POPULARITY_DESC'},
-  {'label': 'ADVENTURE', 'query': 'genre: "Adventure", sort: POPULARITY_DESC'},
-  {'label': 'FANTASY', 'query': 'genre: "Fantasy", sort: POPULARITY_DESC'},
-  {'label': 'SCI-FI', 'query': 'genre: "Sci-Fi", sort: POPULARITY_DESC'},
-  {'label': 'ROMANCE', 'query': 'genre: "Romance", sort: POPULARITY_DESC'},
-  {'label': 'HORROR', 'query': 'genre: "Horror", sort: POPULARITY_DESC'},
-  {'label': 'COMEDY', 'query': 'genre: "Comedy", sort: POPULARITY_DESC'},
-  {'label': 'SPORTS', 'query': 'genre: "Sports", sort: POPULARITY_DESC'},
+  {'label': 'Currently airing', 'query': 'status: RELEASING, sort: POPULARITY_DESC'},
+  {'label': 'Trending now', 'query': 'sort: TRENDING_DESC'},
+  {'label': 'All time popular', 'query': 'sort: POPULARITY_DESC'},
+  {'label': 'Action', 'query': 'genre: "Action", sort: POPULARITY_DESC'},
+  {'label': 'Adventure', 'query': 'genre: "Adventure", sort: POPULARITY_DESC'},
+  {'label': 'Fantasy', 'query': 'genre: "Fantasy", sort: POPULARITY_DESC'},
+  {'label': 'Sci-Fi', 'query': 'genre: "Sci-Fi", sort: POPULARITY_DESC'},
+  {'label': 'Romance', 'query': 'genre: "Romance", sort: POPULARITY_DESC'},
+  {'label': 'Horror', 'query': 'genre: "Horror", sort: POPULARITY_DESC'},
+  {'label': 'Comedy', 'query': 'genre: "Comedy", sort: POPULARITY_DESC'},
 ];
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -69,7 +70,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   @override
   void onWindowMaximize() => setState(() => _isMaximized = true);
-
   @override
   void onWindowUnmaximize() => setState(() => _isMaximized = false);
 
@@ -87,13 +87,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         ? _browseRows.where((r) => r['label'] == onlyLabel).toList()
         : _browseRows;
     for (final row in rows) {
-      if (onlyLabel != null) {
-        if (mounted) setState(() => _browseErrors.remove(onlyLabel));
-      }
+      if (onlyLabel != null && mounted) setState(() => _browseErrors.remove(onlyLabel));
       try {
         final items = await api.fetchBrowseRow(row['query']!);
         if (mounted) setState(() => _browseCache[row['label']!] = items);
-        await Future.delayed(const Duration(milliseconds: 300));
+        await Future.delayed(const Duration(milliseconds: 200));
       } catch (e) {
         if (mounted) setState(() => _browseErrors[row['label']!] = e.toString());
       }
@@ -103,14 +101,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _search() async {
     final q = _searchController.text.trim();
     if (q.isEmpty) return;
-    final provider = _provider;
     setState(() { _searching = true; _searchError = null; _searchResults = []; _anilistResults = []; });
     try {
       final api = context.read<ApiService>();
-      // Run both searches in parallel
       final results = await Future.wait([
-        api.search(q, provider),
-        _searchAnilist(q, api),
+        api.search(q, _provider),
+        api.anilistSearch(q),
       ]);
       setState(() {
         _searchResults = results[0] as List<AnimeResult>;
@@ -119,15 +115,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       });
     } catch (e) {
       setState(() { _searchError = e.toString(); _searching = false; });
-    }
-  }
-
-  Future<List<AnilistMedia>> _searchAnilist(String q, ApiService api) async {
-    try {
-      final data = await api.anilistSearch(q);
-      return data;
-    } catch (_) {
-      return [];
     }
   }
 
@@ -140,15 +127,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _openDetailByName(String name) async {
     final api = context.read<ApiService>();
     final media = await api.fetchAnilistByName(name);
-    if (!mounted) return;
-    if (media != null) {
-      _openDetail(media);
-    } else {
-      // No AniList info, go straight to search
-      _searchController.text = name;
-      _tabController.animateTo(1);
-      _search();
-    }
+    if (media != null && mounted) _openDetail(media);
   }
 
   void _openEpisodes(AnimeResult anime) {
@@ -157,86 +136,76 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ));
   }
 
+  // Featured anime — first item from trending row
+  AnilistMedia? get _featured {
+    final trending = _browseCache['Trending now'];
+    if (trending != null && trending.isNotEmpty) return trending.first;
+    final airing = _browseCache['Currently airing'];
+    if (airing != null && airing.isNotEmpty) return airing.first;
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _bg,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(72),
+        preferredSize: const Size.fromHeight(48),
         child: DragToMoveArea(
-          child: AppBar(
-            toolbarHeight: 40,
-            centerTitle: true,
-            automaticallyImplyLeading: false,
-            title: const Text('MAGI', style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 4,
-              color: _cyan,
-            )),
-            actions: [
-              // Window controls
-              _WinBtn(icon: Icons.remove, onTap: () => windowManager.minimize()),
-              _WinBtn(
-                icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
-                onTap: () async {
-                  if (_isMaximized) { await windowManager.unmaximize(); }
-                  else { await windowManager.maximize(); }
-                },
-              ),
-              _WinBtn(icon: Icons.close, onTap: () => windowManager.close(), isClose: true),
-              const SizedBox(width: 6),
-            ],
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(32),
-              child: Stack(
-                alignment: Alignment.centerRight,
-                children: [
-                  TabBar(
-                    controller: _tabController,
-                    labelColor: _cyan,
-                    unselectedLabelColor: _textDim,
-                    indicatorColor: _cyan,
-                    tabAlignment: TabAlignment.start,
-                    isScrollable: true,
-                    labelStyle: const TextStyle(fontFamily: 'monospace', fontSize: 11, letterSpacing: 2),
-                    tabs: const [Tab(text: 'BROWSE'), Tab(text: 'SEARCH'), Tab(text: 'WATCHLIST')],
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        iconSize: 16,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        icon: const Icon(Icons.calendar_month, color: _textDim),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => SeasonalScreen(provider: _provider),
-                        )),
-                      ),
-                      IconButton(
-                        iconSize: 16,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        icon: const Icon(Icons.settings, color: _textDim),
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          child: Container(
+            height: 48,
+            color: _bg3,
+            child: Row(
+              children: [
+                const SizedBox(width: 20),
+                const Text('MAGI', style: TextStyle(
+                  fontFamily: 'monospace', fontSize: 14, fontWeight: FontWeight.w700,
+                  letterSpacing: 5, color: _cyan,
+                )),
+                const SizedBox(width: 32),
+                // Nav tabs
+                _NavTab(label: 'BROWSE', active: _tabController.index == 0, onTap: () => setState(() => _tabController.index = 0)),
+                _NavTab(label: 'SEARCH', active: _tabController.index == 1, onTap: () => setState(() => _tabController.index = 1)),
+                _NavTab(label: 'WATCHLIST', active: _tabController.index == 2, onTap: () => setState(() => _tabController.index = 2)),
+                const Spacer(),
+                // Right icons
+                _IconBtn(icon: Icons.calendar_month_outlined, onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => SeasonalScreen(provider: _provider),
+                ))),
+                _IconBtn(icon: Icons.settings_outlined, onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const SettingsScreen(),
+                ))),
+                Container(width: 1, height: 16, color: _border, margin: const EdgeInsets.symmetric(horizontal: 8)),
+                _WinBtn(icon: Icons.remove, onTap: () => windowManager.minimize()),
+                _WinBtn(
+                  icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
+                  onTap: () async {
+                    if (_isMaximized) await windowManager.unmaximize();
+                    else await windowManager.maximize();
+                  },
+                ),
+                _WinBtn(icon: Icons.close, onTap: () => windowManager.close(), isClose: true),
+                const SizedBox(width: 6),
+              ],
             ),
           ),
         ),
       ),
       body: TabBarView(
         controller: _tabController,
+        physics: const NeverScrollableScrollPhysics(),
         children: [
           _BrowseTab(
+            featured: _featured,
             browseCache: _browseCache,
             browseErrors: _browseErrors,
             browseRows: _browseRows,
             onCardTap: _openDetail,
             onHistoryTap: _openEpisodes,
             onRetry: (label) => _loadBrowse(onlyLabel: label),
+            onFeaturedWatch: () {
+              if (_featured != null) _openDetail(_featured!);
+            },
           ),
           _SearchTab(
             controller: _searchController,
@@ -257,44 +226,166 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 }
 
+// --- NAV TAB ---
+class _NavTab extends StatefulWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _NavTab({required this.label, required this.active, required this.onTap});
+
+  @override
+  State<_NavTab> createState() => _NavTabState();
+}
+
+class _NavTabState extends State<_NavTab> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(
+              color: widget.active ? _cyan : Colors.transparent, width: 2,
+            )),
+          ),
+          child: Text(widget.label, style: TextStyle(
+            fontFamily: 'monospace', fontSize: 11, letterSpacing: 2,
+            color: widget.active ? _textPrimary : _hovered ? _textSecondary : _textMuted,
+          )),
+        ),
+      ),
+    );
+  }
+}
+
+// --- ICON BTN ---
+class _IconBtn extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _IconBtn({required this.icon, required this.onTap});
+
+  @override
+  State<_IconBtn> createState() => _IconBtnState();
+}
+
+class _IconBtnState extends State<_IconBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 30, height: 30,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: _hovered ? _bg2 : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Icon(widget.icon, size: 16, color: _hovered ? _cyan : _textMuted),
+        ),
+      ),
+    );
+  }
+}
+
+// --- WIN BTN ---
+class _WinBtn extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool isClose;
+  const _WinBtn({required this.icon, required this.onTap, this.isClose = false});
+
+  @override
+  State<_WinBtn> createState() => _WinBtnState();
+}
+
+class _WinBtnState extends State<_WinBtn> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 30, height: 30,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? widget.isClose ? const Color(0xFF7f1d1d) : _bg2
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Icon(widget.icon, size: 14,
+            color: _hovered
+                ? widget.isClose ? const Color(0xFFfca5a5) : _textPrimary
+                : _textMuted),
+        ),
+      ),
+    );
+  }
+}
+
 // --- BROWSE TAB ---
 class _BrowseTab extends StatelessWidget {
+  final AnilistMedia? featured;
   final Map<String, List<AnilistMedia>> browseCache;
   final Map<String, String> browseErrors;
   final List<Map<String, String>> browseRows;
   final void Function(AnilistMedia) onCardTap;
   final void Function(AnimeResult) onHistoryTap;
   final void Function(String) onRetry;
+  final VoidCallback onFeaturedWatch;
 
   const _BrowseTab({
+    required this.featured,
     required this.browseCache,
     required this.browseErrors,
     required this.browseRows,
     required this.onCardTap,
     required this.onHistoryTap,
     required this.onRetry,
+    required this.onFeaturedWatch,
   });
 
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
+        // Hero section
+        SliverToBoxAdapter(
+          child: _HeroSection(media: featured, onWatch: onFeaturedWatch),
+        ),
+
         // Continue watching
         Consumer<HistoryService>(builder: (context, history, _) {
           if (history.entries.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
           return SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SectionLabel('CONTINUE WATCHING'),
+                  const _SectionHeader(title: 'Continue watching'),
                   const SizedBox(height: 12),
                   SizedBox(
-                    height: 90,
+                    height: 82,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      primary: false,
                       itemCount: history.entries.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 10),
                       itemBuilder: (context, i) {
@@ -307,40 +398,27 @@ class _BrowseTab extends StatelessWidget {
                       },
                     ),
                   ),
-                  const SizedBox(height: 24),
                 ],
               ),
             ),
           );
         }),
+
         // Browse rows
         for (final row in browseRows)
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SectionLabel(row['label']!),
+                  _SectionHeader(
+                    title: row['label']!,
+                    showSeeAll: browseCache.containsKey(row['label']),
+                  ),
                   const SizedBox(height: 12),
                   browseErrors.containsKey(row['label'])
-                      ? SizedBox(
-                          height: 240,
-                          child: Center(
-                            child: Column(mainAxisSize: MainAxisSize.min, children: [
-                              const Text('LOAD ERROR', style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFFd44000))),
-                              const SizedBox(height: 8),
-                              GestureDetector(
-                                onTap: () => onRetry(row['label']!),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                  decoration: BoxDecoration(border: Border.all(color: _cyan.withOpacity(0.4))),
-                                  child: const Text('RETRY', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan, letterSpacing: 2)),
-                                ),
-                              ),
-                            ]),
-                          ),
-                        )
+                      ? _ErrorRow(onRetry: () => onRetry(row['label']!))
                       : _ScrollableRow(
                           items: browseCache[row['label']] ?? [],
                           loading: !browseCache.containsKey(row['label']),
@@ -350,228 +428,193 @@ class _BrowseTab extends StatelessWidget {
               ),
             ),
           ),
-        const SliverToBoxAdapter(child: SizedBox(height: 40)),
+
+        const SliverToBoxAdapter(child: SizedBox(height: 48)),
       ],
     );
   }
 }
 
-// --- SEARCH TAB ---
-class _SearchTab extends StatelessWidget {
-  final TextEditingController controller;
-  final String provider;
-  final List<AnimeResult> results;
-  final List<AnilistMedia> anilistResults;
-  final bool searching;
-  final String? error;
-  final void Function(String?) onProviderChanged;
-  final VoidCallback onSearch;
-  final void Function(String) onResultTap;
-  final void Function(AnilistMedia) onAnilistTap;
-
-  const _SearchTab({
-    required this.controller,
-    required this.provider,
-    required this.results,
-    required this.anilistResults,
-    required this.searching,
-    required this.error,
-    required this.onProviderChanged,
-    required this.onSearch,
-    required this.onResultTap,
-    required this.onAnilistTap,
-  });
+// --- HERO SECTION ---
+class _HeroSection extends StatelessWidget {
+  final AnilistMedia? media;
+  final VoidCallback onWatch;
+  const _HeroSection({required this.media, required this.onWatch});
 
   @override
   Widget build(BuildContext context) {
-    final hasResults = results.isNotEmpty || anilistResults.isNotEmpty;
-    return Column(
-      children: [
-        Container(
-          color: _bg2,
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFc8ccd8)),
-                  decoration: InputDecoration(
-                    hintText: 'SEARCH DESIGNATION...',
-                    hintStyle: const TextStyle(fontFamily: 'monospace', color: _textDim, fontSize: 13),
-                    filled: true, fillColor: _bg3,
-                    border: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _cyan), borderRadius: BorderRadius.zero),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    if (media == null) {
+      return Container(
+        height: 220,
+        color: const Color(0xFF0d0f18),
+        child: const Center(child: CircularProgressIndicator(color: _cyan, strokeWidth: 2)),
+      );
+    }
+    final score = media!.averageScore != null
+        ? '★ ${(media!.averageScore! / 10).toStringAsFixed(1)}'
+        : null;
+    final synopsis = media!.description
+        ?.replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('\n', ' ')
+        .trim();
+    final shortSynopsis = synopsis != null && synopsis.length > 160
+        ? '${synopsis.substring(0, 160)}...'
+        : synopsis;
+
+    return Container(
+      color: const Color(0xFF0d0f18),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (media!.status == 'RELEASING')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('CURRENTLY AIRING', style: TextStyle(
+                      fontFamily: 'monospace', fontSize: 10, letterSpacing: 3, color: _cyan,
+                    )),
                   ),
-                  onSubmitted: (_) => onSearch(),
+                Text(media!.title, style: const TextStyle(
+                  fontSize: 22, fontWeight: FontWeight.w700, color: _textPrimary, height: 1.2,
+                )),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6, runSpacing: 6,
+                  children: [
+                    if (score != null) _HeroBadge(text: score, highlight: true),
+                    if (media!.episodes != null) _HeroBadge(text: '${media!.episodes} EP'),
+                    if (media!.year != null) _HeroBadge(text: '${media!.year}'),
+                    ...media!.genres.take(2).map((g) => _HeroBadge(text: g)),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(color: _bg3, border: Border.all(color: _border)),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: provider, dropdownColor: _bg2,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim),
-                    items: const [
-                      DropdownMenuItem(value: 'allanime', child: Text('ALLANIME')),
-                      DropdownMenuItem(value: 'animekai', child: Text('ANIMEKAI')),
-                    ],
-                    onChanged: onProviderChanged,
+                if (shortSynopsis != null) ...[
+                  const SizedBox(height: 12),
+                  Text(shortSynopsis, style: const TextStyle(
+                    fontSize: 13, color: _textMuted, height: 1.6,
+                  ), maxLines: 3, overflow: TextOverflow.ellipsis),
+                ],
+                const SizedBox(height: 16),
+                GestureDetector(
+                  onTap: onWatch,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _cyan,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.play_arrow, color: Color(0xFF0a0b0f), size: 18),
+                      SizedBox(width: 6),
+                      Text('WATCH NOW', style: TextStyle(
+                        fontFamily: 'monospace', fontSize: 12, fontWeight: FontWeight.w700,
+                        color: Color(0xFF0a0b0f), letterSpacing: 1,
+                      )),
+                    ]),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: onSearch,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                  decoration: BoxDecoration(border: Border.all(color: _cyan.withOpacity(0.5))),
-                  child: const Text('EXECUTE', style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: _cyan, letterSpacing: 1)),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: searching
-              ? const Center(child: CircularProgressIndicator(color: _cyan))
-              : error != null
-                  ? Center(child: Text('ERROR: $error', style: const TextStyle(fontFamily: 'monospace', color: Color(0xFFd44000), fontSize: 12)))
-                  : !hasResults
-                      ? const Center(child: Text('AWAITING INPUT', style: TextStyle(fontFamily: 'monospace', color: _textDim, fontSize: 12, letterSpacing: 2)))
-                      : Row(
-                          children: [
-                            // AniList results panel
-                            if (anilistResults.isNotEmpty)
-                              SizedBox(
-                                width: 200,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                                      color: _bg2,
-                                      child: const Row(children: [
-                                        Text('ANILIST', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textDim, letterSpacing: 2)),
-                                        SizedBox(width: 8),
-                                        Expanded(child: Divider(color: _border, height: 1)),
-                                      ]),
-                                    ),
-                                    Expanded(
-                                      child: ListView.builder(
-                                        itemCount: anilistResults.length,
-                                        itemBuilder: (context, i) {
-                                          final m = anilistResults[i];
-                                          return GestureDetector(
-                                            onTap: () => onAnilistTap(m),
-                                            child: Container(
-                                              padding: const EdgeInsets.all(10),
-                                              decoration: const BoxDecoration(
-                                                border: Border(bottom: BorderSide(color: _border, width: 0.5)),
-                                              ),
-                                              child: Row(children: [
-                                                if (m.coverImage != null)
-                                                  Image.network(m.coverImage!, width: 40, height: 56, fit: BoxFit.cover,
-                                                    errorBuilder: (_, __, ___) => Container(width: 40, height: 56, color: _bg3))
-                                                else
-                                                  Container(width: 40, height: 56, color: _bg3),
-                                                const SizedBox(width: 10),
-                                                Expanded(child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(m.title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                                                      style: const TextStyle(fontSize: 12, color: Color(0xFFc8ccd8), height: 1.3)),
-                                                    if (m.averageScore != null)
-                                                      Text('★ ${(m.averageScore! / 10).toStringAsFixed(1)}',
-                                                        style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan)),
-                                                  ],
-                                                )),
-                                              ]),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            if (anilistResults.isNotEmpty)
-                              const VerticalDivider(color: _border, width: 1),
-                            // Provider results
-                            Expanded(
-                              child: results.isEmpty
-                                  ? const Center(child: Text('NO PROVIDER RESULTS', style: TextStyle(fontFamily: 'monospace', color: _textDim, fontSize: 11, letterSpacing: 1)))
-                                  : Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                                          color: _bg2,
-                                          child: Row(children: [
-                                            Text(provider.toUpperCase(), style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textDim, letterSpacing: 2)),
-                                            const SizedBox(width: 8),
-                                            const Expanded(child: Divider(color: _border, height: 1)),
-                                          ]),
-                                        ),
-                                        Expanded(
-                                          child: GridView.builder(
-                                            padding: const EdgeInsets.all(12),
-                                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                              maxCrossAxisExtent: 200, childAspectRatio: 1.6, crossAxisSpacing: 8, mainAxisSpacing: 8,
-                                            ),
-                                            itemCount: results.length,
-                                            itemBuilder: (context, i) => AnimeCardWidget(
-                                              anime: results[i],
-                                              onTap: () => onResultTap(results[i].name),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                          ],
-                        ),
-        ),
-      ],
+          const SizedBox(width: 20),
+          if (media!.coverImage != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                media!.coverImage!,
+                width: 130, height: 184,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox(),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
-class _SectionLabel extends StatelessWidget {
+class _HeroBadge extends StatelessWidget {
   final String text;
-  const _SectionLabel(this.text);
+  final bool highlight;
+  const _HeroBadge({required this.text, this.highlight = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: highlight ? _cyan.withOpacity(0.08) : Colors.transparent,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: highlight ? _cyan.withOpacity(0.4) : _border),
+      ),
+      child: Text(text, style: TextStyle(
+        fontFamily: 'monospace', fontSize: 10,
+        color: highlight ? _cyan : _textSecondary,
+      )),
+    );
+  }
+}
+
+// --- SECTION HEADER ---
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final bool showSeeAll;
+  const _SectionHeader({required this.title, this.showSeeAll = false});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(text, style: const TextStyle(
-          fontFamily: 'monospace', fontSize: 11,
-          color: _textDim, letterSpacing: 3,
-        )),
-        const SizedBox(width: 10),
-        const Expanded(child: Divider(color: _border, height: 1)),
+        Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _textPrimary)),
+        const Spacer(),
+        if (showSeeAll)
+          Text('SEE ALL →', style: TextStyle(
+            fontFamily: 'monospace', fontSize: 10, color: _cyan.withOpacity(0.7), letterSpacing: 1,
+          )),
       ],
     );
   }
 }
 
+// --- ERROR ROW ---
+class _ErrorRow extends StatelessWidget {
+  final VoidCallback onRetry;
+  const _ErrorRow({required this.onRetry});
 
-// --- SCROLLABLE ROW WITH ARROW BUTTONS ---
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 196,
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('LOAD ERROR', style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFFd44000))),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: onRetry,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: _cyan.withOpacity(0.4)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text('RETRY', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan, letterSpacing: 2)),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// --- SCROLLABLE ROW ---
 class _ScrollableRow extends StatefulWidget {
   final List<AnilistMedia> items;
   final bool loading;
   final void Function(AnilistMedia) onCardTap;
-
-  const _ScrollableRow({
-    required this.items,
-    required this.loading,
-    required this.onCardTap,
-  });
+  const _ScrollableRow({required this.items, required this.loading, required this.onCardTap});
 
   @override
   State<_ScrollableRow> createState() => _ScrollableRowState();
@@ -603,17 +646,9 @@ class _ScrollableRowState extends State<_ScrollableRow> {
     super.dispose();
   }
 
-  void _scrollLeft() {
+  void _scroll(double delta) {
     _sc.animateTo(
-      (_sc.offset - 400).clamp(0.0, _sc.position.maxScrollExtent),
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-  }
-
-  void _scrollRight() {
-    _sc.animateTo(
-      (_sc.offset + 400).clamp(0.0, _sc.position.maxScrollExtent),
+      (_sc.offset + delta).clamp(0.0, _sc.position.maxScrollExtent),
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
@@ -622,10 +657,9 @@ class _ScrollableRowState extends State<_ScrollableRow> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 240,
+      height: 220,
       child: Stack(
         children: [
-          // The list
           widget.loading
               ? ListView.separated(
                   scrollDirection: Axis.horizontal,
@@ -644,41 +678,37 @@ class _ScrollableRowState extends State<_ScrollableRow> {
                     return BrowseCardWidget(media: media, onTap: () => widget.onCardTap(media));
                   },
                 ),
-          // Left arrow
           if (!_atStart)
             Positioned(
               left: 0, top: 0, bottom: 0,
               child: GestureDetector(
-                onTap: _scrollLeft,
+                onTap: () => _scroll(-400),
                 child: Container(
                   width: 36,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      begin: Alignment.centerRight,
-                      end: Alignment.centerLeft,
-                      colors: [Colors.transparent, const Color(0xFF0a0b0f).withOpacity(0.9)],
+                      begin: Alignment.centerRight, end: Alignment.centerLeft,
+                      colors: [Colors.transparent, _bg.withOpacity(0.9)],
                     ),
                   ),
-                  child: const Icon(Icons.chevron_left, color: _cyan, size: 28),
+                  child: const Icon(Icons.chevron_left, color: _cyan, size: 24),
                 ),
               ),
             ),
-          // Right arrow
           if (!_atEnd && !widget.loading)
             Positioned(
               right: 0, top: 0, bottom: 0,
               child: GestureDetector(
-                onTap: _scrollRight,
+                onTap: () => _scroll(400),
                 child: Container(
                   width: 36,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [Colors.transparent, const Color(0xFF0a0b0f).withOpacity(0.9)],
+                      begin: Alignment.centerLeft, end: Alignment.centerRight,
+                      colors: [Colors.transparent, _bg.withOpacity(0.9)],
                     ),
                   ),
-                  child: const Icon(Icons.chevron_right, color: _cyan, size: 28),
+                  child: const Icon(Icons.chevron_right, color: _cyan, size: 24),
                 ),
               ),
             ),
@@ -688,44 +718,204 @@ class _ScrollableRowState extends State<_ScrollableRow> {
   }
 }
 
-class _WinBtn extends StatefulWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool isClose;
-  const _WinBtn({required this.icon, required this.onTap, this.isClose = false});
+// --- SEARCH TAB ---
+class _SearchTab extends StatelessWidget {
+  final TextEditingController controller;
+  final String provider;
+  final List<AnimeResult> results;
+  final List<AnilistMedia> anilistResults;
+  final bool searching;
+  final String? error;
+  final void Function(String?) onProviderChanged;
+  final VoidCallback onSearch;
+  final void Function(String) onResultTap;
+  final void Function(AnilistMedia) onAnilistTap;
 
-  @override
-  State<_WinBtn> createState() => _WinBtnState();
-}
-
-class _WinBtnState extends State<_WinBtn> {
-  bool _hovered = false;
+  const _SearchTab({
+    required this.controller, required this.provider,
+    required this.results, required this.anilistResults,
+    required this.searching, required this.error,
+    required this.onProviderChanged, required this.onSearch,
+    required this.onResultTap, required this.onAnilistTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          width: 32,
-          height: 32,
-          margin: const EdgeInsets.symmetric(horizontal: 1),
-          decoration: BoxDecoration(
-            color: _hovered
-                ? widget.isClose
-                    ? const Color(0xFFc0392b).withOpacity(0.8)
-                    : _cyan.withOpacity(0.15)
-                : Colors.transparent,
-          ),
-          child: Icon(widget.icon, size: 14,
-            color: _hovered
-                ? widget.isClose ? Colors.white : _cyan
-                : _textDim),
+    final hasResults = results.isNotEmpty || anilistResults.isNotEmpty;
+    return Column(
+      children: [
+        Container(
+          color: _bg3,
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Expanded(
+              child: Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: _bg2,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _border),
+                ),
+                child: Row(children: [
+                  const SizedBox(width: 12),
+                  const Icon(Icons.search, color: _textMuted, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      style: const TextStyle(fontSize: 13, color: _textPrimary),
+                      decoration: const InputDecoration(
+                        hintText: 'Search anime...',
+                        hintStyle: TextStyle(color: _textMuted, fontSize: 13),
+                        border: InputBorder.none, isDense: true,
+                      ),
+                      onSubmitted: (_) => onSearch(),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: _bg2, borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _border),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: provider, dropdownColor: _bg2,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textMuted),
+                  items: const [
+                    DropdownMenuItem(value: 'allanime', child: Text('ALLANIME')),
+                    DropdownMenuItem(value: 'animekai', child: Text('ANIMEKAI')),
+                  ],
+                  onChanged: onProviderChanged,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: onSearch,
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: _cyan, borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(
+                  child: Text('SEARCH', style: TextStyle(
+                    fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w700,
+                    color: Color(0xFF0a0b0f), letterSpacing: 1,
+                  )),
+                ),
+              ),
+            ),
+          ]),
         ),
-      ),
+        const Divider(color: _border, height: 1),
+        Expanded(
+          child: searching
+              ? const Center(child: CircularProgressIndicator(color: _cyan, strokeWidth: 2))
+              : error != null
+                  ? Center(child: Text('Error: $error', style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFFd44000))))
+                  : !hasResults
+                      ? Center(
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.search, color: _textMuted, size: 40),
+                            const SizedBox(height: 12),
+                            const Text('Search for anime', style: TextStyle(fontSize: 15, color: _textSecondary, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 4),
+                            Text('Results from AniList and $provider', style: const TextStyle(fontSize: 13, color: _textMuted)),
+                          ]),
+                        )
+                      : Row(children: [
+                          if (anilistResults.isNotEmpty)
+                            SizedBox(
+                              width: 220,
+                              child: Column(children: [
+                                Container(
+                                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                                  color: _bg3,
+                                  child: const Row(children: [
+                                    Text('ANILIST', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textMuted, letterSpacing: 2)),
+                                  ]),
+                                ),
+                                const Divider(color: _border, height: 1),
+                                Expanded(
+                                  child: ListView.builder(
+                                    itemCount: anilistResults.length,
+                                    itemBuilder: (context, i) {
+                                      final m = anilistResults[i];
+                                      return InkWell(
+                                        onTap: () => onAnilistTap(m),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: const BoxDecoration(
+                                            border: Border(bottom: BorderSide(color: _border, width: 0.5)),
+                                          ),
+                                          child: Row(children: [
+                                            if (m.coverImage != null)
+                                              ClipRRect(
+                                                borderRadius: BorderRadius.circular(4),
+                                                child: Image.network(m.coverImage!, width: 38, height: 54, fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) => Container(width: 38, height: 54, color: _bg2)),
+                                              )
+                                            else Container(width: 38, height: 54, color: _bg2, decoration: BoxDecoration(borderRadius: BorderRadius.circular(4))),
+                                            const SizedBox(width: 10),
+                                            Expanded(child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(m.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: _textPrimary, height: 1.3)),
+                                                if (m.averageScore != null)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(top: 4),
+                                                    child: Text('★ ${(m.averageScore! / 10).toStringAsFixed(1)}',
+                                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan)),
+                                                  ),
+                                              ],
+                                            )),
+                                          ]),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ]),
+                            ),
+                          if (anilistResults.isNotEmpty)
+                            const VerticalDivider(color: _border, width: 1),
+                          Expanded(
+                            child: results.isEmpty
+                                ? const Center(child: Text('No provider results', style: TextStyle(fontSize: 13, color: _textMuted)))
+                                : Column(children: [
+                                    Container(
+                                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                                      color: _bg3,
+                                      child: Row(children: [
+                                        Text(provider.toUpperCase(), style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textMuted, letterSpacing: 2)),
+                                      ]),
+                                    ),
+                                    const Divider(color: _border, height: 1),
+                                    Expanded(
+                                      child: GridView.builder(
+                                        padding: const EdgeInsets.all(16),
+                                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                          maxCrossAxisExtent: 200, childAspectRatio: 1.6, crossAxisSpacing: 8, mainAxisSpacing: 8,
+                                        ),
+                                        itemCount: results.length,
+                                        itemBuilder: (context, i) => AnimeCardWidget(
+                                          anime: results[i], onTap: () => onResultTap(results[i].name),
+                                        ),
+                                      ),
+                                    ),
+                                  ]),
+                          ),
+                        ]),
+        ),
+      ],
     );
   }
 }
