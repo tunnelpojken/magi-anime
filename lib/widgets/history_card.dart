@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/models.dart';
 import '../services/history_service.dart';
 
 const _bg2 = Color(0xFF111827);
