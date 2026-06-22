@@ -151,9 +151,14 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
 
       setState(() { _status = 'INSTALLING...'; });
 
-      // Install to /opt/magi-anime
+      // Write a helper script and run it with pkexec
       final bundlePath = '$extractPath/bundle';
-      final result = await Process.run('sudo', ['cp', '-r', '$bundlePath/.', '/opt/magi-anime/']);
+      final scriptPath = '${tmpDir.path}/magi_install.sh';
+      await File(scriptPath).writeAsString(
+        '#!/bin/bash\ncp -r "$bundlePath/." /opt/magi-anime/\n'
+      );
+      await Process.run('chmod', ['+x', scriptPath]);
+      final result = await Process.run('pkexec', [scriptPath]);
 
       if (result.exitCode != 0) {
         setState(() { _status = 'ERROR: Auth failed. Run manually:\nsudo cp -r $bundlePath/. /opt/magi-anime/'; });
