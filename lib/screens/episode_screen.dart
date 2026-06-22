@@ -139,8 +139,12 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
 
   void _checkNextEpTiming(Duration pos) {
     if (_showNextEpPrompt || _playingEp == null) return;
-    if (_duration.inSeconds <= 0) return;
-    final remaining = _duration.inSeconds - pos.inSeconds;
+    final cast = context.read<CastService>();
+    // Use cast duration/position when casting
+    final dur = cast.isConnected ? cast.castDuration : _duration;
+    final currentPos = cast.isConnected ? cast.castPosition : pos;
+    if (dur.inSeconds <= 0) return;
+    final remaining = dur.inSeconds - currentPos.inSeconds;
     // Show next episode prompt 30 seconds before end
     if (remaining > 0 && remaining <= 30) {
       final idx = _episodes.indexOf(_playingEp!);
@@ -322,6 +326,13 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
 
   void _showCastDialog() async {
     final cast = context.read<CastService>();
+
+    // If already casting, show episode switcher instead of device picker
+    if (cast.isConnected) {
+      _showCastEpisodeDialog();
+      return;
+    }
+
     await cast.startScan();
     if (!mounted) return;
     final manualController = TextEditingController();
@@ -422,6 +433,56 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showCastEpisodeDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _bg2,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('CAST — SELECT EPISODE', style: TextStyle(fontFamily: 'monospace', fontSize: 13, color: _cyan, letterSpacing: 1)),
+        content: SizedBox(
+          width: 300,
+          height: 400,
+          child: ListView.builder(
+            itemCount: _episodes.length,
+            itemExtent: 48,
+            itemBuilder: (context, i) {
+              final ep = _episodes[i];
+              final isCurrent = ep == _playingEp;
+              return ListTile(
+                dense: true,
+                leading: Text(ep.toInt().toString().padLeft(2, '0'),
+                  style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: isCurrent ? _cyan : _textDim)),
+                title: Text('Episode ${ep.toInt()}', style: TextStyle(
+                  fontFamily: 'monospace', fontSize: 12,
+                  color: isCurrent ? _cyan : const Color(0xFFc8ccd8),
+                )),
+                trailing: isCurrent ? const Text('NOW CASTING', style: TextStyle(fontFamily: 'monospace', fontSize: 9, color: _cyan)) : null,
+                onTap: () {
+                  Navigator.pop(context);
+                  _playEpisode(ep);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              context.read<CastService>().disconnect();
+              Navigator.pop(context);
+            },
+            child: const Text('DISCONNECT', style: TextStyle(fontFamily: 'monospace', color: _red)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CLOSE', style: TextStyle(fontFamily: 'monospace', color: _textDim)),
+          ),
+        ],
       ),
     );
   }

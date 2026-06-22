@@ -128,17 +128,23 @@ class CastService extends ChangeNotifier {
     }
   }
 
+  int _heartbeatCount = 0;
+
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (_isConnected) {
-        _sendMessage(
-          namespace: 'urn:x-cast:com.google.cast.tp.heartbeat',
-          sourceId: 'sender-0',
-          destinationId: 'receiver-0',
-          payload: {'type': 'PING'},
-        );
-        // Poll media status for position updates
+        _heartbeatCount++;
+        // PING every 10 seconds (every 5th 2s tick)
+        if (_heartbeatCount % 5 == 0) {
+          _sendMessage(
+            namespace: 'urn:x-cast:com.google.cast.tp.heartbeat',
+            sourceId: 'sender-0',
+            destinationId: 'receiver-0',
+            payload: {'type': 'PING'},
+          );
+        }
+        // Poll media status every 2 seconds for position updates
         if (_transportId != null) {
           _sendMessage(
             namespace: 'urn:x-cast:com.google.cast.media',
@@ -351,6 +357,7 @@ class CastService extends ChangeNotifier {
 
   void _handleDisconnect() {
     _heartbeatTimer?.cancel();
+    _heartbeatCount = 0;
     _isConnected = false;
     _isCasting = false;
     _connectedDevice = null;
