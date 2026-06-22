@@ -304,10 +304,10 @@ class _BrowseTab extends StatelessWidget {
                 children: [
                   _SectionLabel(row['label']!),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 240,
-                    child: browseErrors.containsKey(row['label'])
-                        ? Center(
+                  browseErrors.containsKey(row['label'])
+                      ? SizedBox(
+                          height: 240,
+                          child: Center(
                             child: Column(mainAxisSize: MainAxisSize.min, children: [
                               const Text('LOAD ERROR', style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFFd44000))),
                               const SizedBox(height: 8),
@@ -320,26 +320,13 @@ class _BrowseTab extends StatelessWidget {
                                 ),
                               ),
                             ]),
-                          )
-                        : browseCache.containsKey(row['label'])
-                            ? ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                primary: false,
-                                itemCount: browseCache[row['label']]!.length,
-                                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                                itemBuilder: (context, i) {
-                                  final media = browseCache[row['label']]![i];
-                                  return BrowseCardWidget(media: media, onTap: () => onCardTap(media));
-                                },
-                              )
-                            : ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                primary: false,
-                                itemCount: 10,
-                                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                                itemBuilder: (_, __) => const ShimmerBrowseCard(),
-                              ),
-                  ),
+                          ),
+                        )
+                      : _ScrollableRow(
+                          items: browseCache[row['label']] ?? [],
+                          loading: !browseCache.containsKey(row['label']),
+                          onCardTap: onCardTap,
+                        ),
                 ],
               ),
             ),
@@ -554,3 +541,130 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+
+// --- SCROLLABLE ROW WITH ARROW BUTTONS ---
+class _ScrollableRow extends StatefulWidget {
+  final List<AnilistMedia> items;
+  final bool loading;
+  final void Function(AnilistMedia) onCardTap;
+
+  const _ScrollableRow({
+    required this.items,
+    required this.loading,
+    required this.onCardTap,
+  });
+
+  @override
+  State<_ScrollableRow> createState() => _ScrollableRowState();
+}
+
+class _ScrollableRowState extends State<_ScrollableRow> {
+  final ScrollController _sc = ScrollController();
+  bool _atStart = true;
+  bool _atEnd = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sc.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onScroll());
+  }
+
+  void _onScroll() {
+    if (!_sc.hasClients) return;
+    setState(() {
+      _atStart = _sc.position.pixels <= 0;
+      _atEnd = _sc.position.pixels >= _sc.position.maxScrollExtent;
+    });
+  }
+
+  @override
+  void dispose() {
+    _sc.dispose();
+    super.dispose();
+  }
+
+  void _scrollLeft() {
+    _sc.animateTo(
+      (_sc.offset - 400).clamp(0.0, _sc.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _scrollRight() {
+    _sc.animateTo(
+      (_sc.offset + 400).clamp(0.0, _sc.position.maxScrollExtent),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 240,
+      child: Stack(
+        children: [
+          // The list
+          widget.loading
+              ? ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  controller: _sc,
+                  itemCount: 10,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, __) => const ShimmerBrowseCard(),
+                )
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  controller: _sc,
+                  itemCount: widget.items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final media = widget.items[i];
+                    return BrowseCardWidget(media: media, onTap: () => widget.onCardTap(media));
+                  },
+                ),
+          // Left arrow
+          if (!_atStart)
+            Positioned(
+              left: 0, top: 0, bottom: 0,
+              child: GestureDetector(
+                onTap: _scrollLeft,
+                child: Container(
+                  width: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerRight,
+                      end: Alignment.centerLeft,
+                      colors: [Colors.transparent, const Color(0xFF0a0b0f).withOpacity(0.9)],
+                    ),
+                  ),
+                  child: const Icon(Icons.chevron_left, color: _cyan, size: 28),
+                ),
+              ),
+            ),
+          // Right arrow
+          if (!_atEnd && !widget.loading)
+            Positioned(
+              right: 0, top: 0, bottom: 0,
+              child: GestureDetector(
+                onTap: _scrollRight,
+                child: Container(
+                  width: 36,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Colors.transparent, const Color(0xFF0a0b0f).withOpacity(0.9)],
+                    ),
+                  ),
+                  child: const Icon(Icons.chevron_right, color: _cyan, size: 28),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
