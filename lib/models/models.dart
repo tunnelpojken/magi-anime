@@ -16,6 +16,7 @@ class AnimeResult {
 
 class AnilistMedia {
   final int id;
+  final int? idMal;
   final String title;
   final String? titleRomaji;
   final String? coverImage;
@@ -31,6 +32,7 @@ class AnilistMedia {
 
   AnilistMedia({
     required this.id,
+    this.idMal,
     required this.title,
     this.titleRomaji,
     this.coverImage,
@@ -53,6 +55,7 @@ class AnilistMedia {
     final edges = relationsData?['edges'] as List? ?? [];
     return AnilistMedia(
       id: json['id'] ?? 0,
+      idMal: json['idMal'] as int?,
       title: title?['english'] ?? title?['romaji'] ?? title?['native'] ?? 'Unknown',
       titleRomaji: title?['romaji'],
       coverImage: coverImage?['large'],

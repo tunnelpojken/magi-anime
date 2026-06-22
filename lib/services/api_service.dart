@@ -7,7 +7,7 @@ import '../models/models.dart';
 const _defaultApi = 'http://192.168.0.37:3002';
 const _anilistUrl = 'https://graphql.anilist.co';
 const _mediaFields = '''
-  id title { english romaji native }
+  id idMal title { english romaji native }
   coverImage { large }
   episodes averageScore status seasonYear season
   genres description(asHtml: false)
@@ -113,6 +113,33 @@ class ApiService extends ChangeNotifier {
     ''');
     final items = (data['Page']?['media'] as List?) ?? [];
     return items.map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
+  }
+
+  Future<Map<String, dynamic>?> fetchSkipTimes(int malId, int episode) async {
+    try {
+      // Try v1 API which has better coverage
+      final uri = Uri.parse('https://api.aniskip.com/v1/skip-times/$malId/$episode?types=op&types=ed');
+      final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (res.statusCode != 200) return null;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['found'] != true) return null;
+      final results = data['results'] as List?;
+      if (results == null || results.isEmpty) return null;
+      final Map<String, dynamic> times = {};
+      for (final r in results) {
+        final type = r['skipType'] as String?;
+        final interval = r['interval'] as Map<String, dynamic>?;
+        if (type != null && interval != null) {
+          times[type] = {
+            'start': (interval['startTime'] as num).toDouble(),
+            'end': (interval['endTime'] as num).toDouble(),
+          };
+        }
+      }
+      return times.isEmpty ? null : times;
+    } catch (e) {
+      return null;
+    }
   }
 
   Future<List<AnilistMedia>> anilistSearch(String query) async {

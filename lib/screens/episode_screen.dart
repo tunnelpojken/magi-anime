@@ -19,7 +19,8 @@ const _red = Color(0xFFd44000);
 
 class EpisodeScreen extends StatefulWidget {
   final AnimeResult anime;
-  const EpisodeScreen({super.key, required this.anime});
+  final AnilistMedia? anilistMedia;
+  const EpisodeScreen({super.key, required this.anime, this.anilistMedia});
 
   @override
   State<EpisodeScreen> createState() => _EpisodeScreenState();
@@ -58,6 +59,11 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   int _nextEpCountdown = 5;
   Timer? _nextEpTimer;
 
+  // Skip times
+  Map<String, dynamic>? _skipTimes;
+  bool _showSkipIntro = false;
+  bool _showSkipOutro = false;
+
   // Progress
   Timer? _progressTimer;
   Duration _lastSavedPosition = Duration.zero;
@@ -75,7 +81,11 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
 
   void _setupPlayerListeners() {
     _posSub = _player.stream.position.listen((pos) {
-      if (mounted) setState(() => _position = pos);
+      if (mounted) {
+        setState(() => _position = pos);
+        _checkSkipTimes(pos);
+        _checkNextEpTiming(pos);
+      }
     });
     _durSub = _player.stream.duration.listen((dur) {
       if (mounted) setState(() => _duration = dur);
@@ -89,7 +99,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   }
 
   void _onEpisodeComplete() {
-    if (_playingEp == null) return;
+    if (_showNextEpPrompt || _playingEp == null) return;
     final idx = _episodes.indexOf(_playingEp!);
     if (idx < 0 || idx >= _episodes.length - 1) return;
     final nextEp = _episodes[idx + 1];
@@ -104,6 +114,47 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
         _playEpisode(nextEp);
       }
     });
+  }
+
+  void _checkSkipTimes(Duration pos) {
+    if (_skipTimes == null) return;
+    final secs = pos.inSeconds.toDouble();
+
+    final op = _skipTimes!['op'] as Map<String, dynamic>?;
+    final ed = _skipTimes!['ed'] as Map<String, dynamic>?;
+
+    final inIntro = op != null && secs >= (op['start'] as double) && secs <= (op['end'] as double);
+    final inOutro = ed != null && secs >= (ed['start'] as double) && secs <= (ed['end'] as double);
+
+    if (_showSkipIntro != inIntro || _showSkipOutro != inOutro) {
+      setState(() {
+        _showSkipIntro = inIntro;
+        _showSkipOutro = inOutro;
+      });
+    }
+  }
+
+  void _checkNextEpTiming(Duration pos) {
+    if (_showNextEpPrompt || _playingEp == null) return;
+    if (_duration.inSeconds <= 0) return;
+    final remaining = _duration.inSeconds - pos.inSeconds;
+    // Show next episode prompt ~90 seconds before end
+    if (remaining > 0 && remaining <= 90) {
+      final idx = _episodes.indexOf(_playingEp!);
+      if (idx >= 0 && idx < _episodes.length - 1) {
+        _onEpisodeComplete();
+      }
+    }
+  }
+
+  Future<void> _fetchSkipTimes(double ep) async {
+    final malId = widget.anilistMedia?.idMal;
+    if (malId == null) return;
+    try {
+      final api = context.read<ApiService>();
+      final times = await api.fetchSkipTimes(malId, ep.toInt());
+        if (mounted) setState(() => _skipTimes = times);
+    } catch (_) {}
   }
 
   @override
@@ -363,10 +414,11 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   }
 
   Future<void> _playEpisode(double ep, {Duration? resumeFrom}) async {
-    setState(() { _loadingStream = true; _playingEp = ep; _playerReady = false; _showNextEpPrompt = false; });
+    setState(() { _loadingStream = true; _playingEp = ep; _playerReady = false; _showNextEpPrompt = false; _showSkipIntro = false; _showSkipOutro = false; _skipTimes = null; });
     _progressTimer?.cancel();
     _nextEpTimer?.cancel();
     _lastSavedPosition = Duration.zero;
+    _fetchSkipTimes(ep);
     final api = context.read<ApiService>();
     final cast = context.read<CastService>();
     final history = context.read<HistoryService>();
@@ -512,6 +564,9 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         isCasting: cast.isConnected,
                         onFullscreen: _toggleFullscreen,
                         isFullscreen: _isFullscreen,
+                        onNextEpisode: _playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1
+                            ? () { final idx = _episodes.indexOf(_playingEp!); if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]); }
+                            : null,
                       ),
                     if (_showNextEpPrompt)
                       _NextEpPrompt(
@@ -524,6 +579,16 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         },
                         onCancel: () { _nextEpTimer?.cancel(); setState(() => _showNextEpPrompt = false); },
                       ),
+                    if (_showSkipIntro)
+                      _SkipButton(label: 'SKIP INTRO', onTap: () {
+                        final end = (_skipTimes!['op']['end'] as double);
+                        _player.seek(Duration(seconds: end.toInt()));
+                      }),
+                    if (_showSkipOutro)
+                      _SkipButton(label: 'SKIP OUTRO', onTap: () {
+                        final idx = _episodes.indexOf(_playingEp!);
+                        if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]);
+                      }),
                   ],
                 )
               : Column(
@@ -574,6 +639,9 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           isCasting: cast.isConnected,
                           onFullscreen: _toggleFullscreen,
                           isFullscreen: _isFullscreen,
+                          onNextEpisode: _playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1
+                              ? () { final idx = _episodes.indexOf(_playingEp!); if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]); }
+                              : null,
                         ),
                       // Next episode prompt
                       if (_showNextEpPrompt)
@@ -587,6 +655,16 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           },
                           onCancel: () { _nextEpTimer?.cancel(); setState(() => _showNextEpPrompt = false); },
                         ),
+                      if (_showSkipIntro)
+                        _SkipButton(label: 'SKIP INTRO', onTap: () {
+                          final end = (_skipTimes!['op']['end'] as double);
+                          _player.seek(Duration(seconds: end.toInt()));
+                        }),
+                      if (_showSkipOutro)
+                        _SkipButton(label: 'SKIP OUTRO', onTap: () {
+                          final idx = _episodes.indexOf(_playingEp!);
+                          if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]);
+                        }),
                     ],
                   ),
                 ),
@@ -624,6 +702,24 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                     else
                       const Spacer(),
                     const SizedBox(width: 8),
+                    // Next episode button — only show when an episode is playing and there's a next one
+                    if (_playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1)
+                      GestureDetector(
+                        onTap: () {
+                          final idx = _episodes.indexOf(_playingEp!);
+                          if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(border: Border.all(color: _cyan.withOpacity(0.4))),
+                          child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                            Text('NEXT EP', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan, letterSpacing: 1)),
+                            SizedBox(width: 4),
+                            Icon(Icons.skip_next, color: _cyan, size: 14),
+                          ]),
+                        ),
+                      ),
                     GestureDetector(
                       onTap: _jumpToNextUnwatched,
                       child: Container(
@@ -717,6 +813,7 @@ class _PlayerOverlay extends StatelessWidget {
   final bool isCasting;
   final VoidCallback onFullscreen;
   final bool isFullscreen;
+  final VoidCallback? onNextEpisode;
 
   const _PlayerOverlay({
     required this.position,
@@ -732,6 +829,7 @@ class _PlayerOverlay extends StatelessWidget {
     required this.isCasting,
     required this.onFullscreen,
     required this.isFullscreen,
+    this.onNextEpisode,
   });
 
   String _fmt(Duration d) {
@@ -796,6 +894,13 @@ class _PlayerOverlay extends StatelessWidget {
                 icon: const Icon(Icons.forward_10, color: Colors.white, size: 28),
                 onPressed: onSkipForward,
               ),
+              // Next episode
+              if (onNextEpisode != null)
+                IconButton(
+                  icon: const Icon(Icons.skip_next, color: Colors.white, size: 28),
+                  onPressed: onNextEpisode,
+                  tooltip: 'Next episode',
+                ),
               const Spacer(),
               // Cast button
               IconButton(
@@ -951,6 +1056,39 @@ class _EpisodeItem extends StatelessWidget {
               backgroundColor: Colors.transparent,
               valueColor: const AlwaysStoppedAnimation<Color>(_cyan))),
       ]),
+    );
+  }
+}
+
+// --- SKIP BUTTON ---
+class _SkipButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _SkipButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      bottom: 80,
+      left: 16,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0f1117).withOpacity(0.95),
+            border: Border.all(color: const Color(0xFF00d4d4).withOpacity(0.6)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.fast_forward, color: Color(0xFF00d4d4), size: 16),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(
+              fontFamily: 'monospace', fontSize: 11,
+              color: Color(0xFF00d4d4), letterSpacing: 2,
+            )),
+          ]),
+        ),
+      ),
     );
   }
 }

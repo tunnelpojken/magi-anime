@@ -32,7 +32,7 @@ class DetailScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No results found on provider')));
         return;
       }
-      Navigator.push(context, MaterialPageRoute(builder: (_) => EpisodeScreen(anime: results.first)));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => EpisodeScreen(anime: results.first, anilistMedia: media)));
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
