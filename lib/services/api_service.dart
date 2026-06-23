@@ -175,6 +175,38 @@ class ApiService extends ChangeNotifier {
     return List<Map<String, dynamic>>.from(data['Page']?['airingSchedules'] ?? []);
   }
 
+  Future<List<AnilistMedia>> advancedSearch({
+    String? query,
+    String sort = 'POPULARITY_DESC',
+    String? genre,
+    String? format,
+    String? status,
+    String? season,
+    int? year,
+    int? minScore,
+  }) async {
+    final filters = <String>[];
+    if (query != null && query.isNotEmpty) filters.add('search: "${query.replaceAll('"', '')}"');
+    filters.add('sort: [$sort]');
+    filters.add('type: ANIME');
+    if (genre != null) filters.add('genre: "$genre"');
+    if (format != null) filters.add('format: $format');
+    if (status != null) filters.add('status: $status');
+    if (season != null) filters.add('season: $season');
+    if (year != null) filters.add('seasonYear: $year');
+    if (minScore != null) filters.add('averageScore_greater: $minScore');
+
+    final data = await _anilistQuery('''
+      query {
+        Page(page: 1, perPage: 40) {
+          media(${filters.join(', ')}) { $_mediaFields }
+        }
+      }
+    ''');
+    final items = (data['Page']?['media'] as List?) ?? [];
+    return items.map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
+  }
+
   Future<List<AnilistMedia>> anilistSearch(String query) async {
     final data = await _anilistQuery('''
       query(\$s: String) {

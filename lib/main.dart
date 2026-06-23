@@ -6,6 +6,7 @@ import 'services/api_service.dart';
 import 'services/history_service.dart';
 import 'services/watchlist_service.dart';
 import 'services/cast_service.dart';
+import 'services/search_history_service.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
@@ -28,6 +29,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => HistoryService()),
         ChangeNotifierProvider(create: (_) => WatchlistService()),
         ChangeNotifierProvider(create: (_) => CastService()),
+        ChangeNotifierProvider(create: (_) => SearchHistoryService()),
       ],
       child: const MagiApp(),
     ),

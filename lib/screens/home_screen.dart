@@ -7,7 +7,6 @@ import '../services/history_service.dart';
 import '../services/watchlist_service.dart';
 import '../services/update_service.dart';
 import '../models/models.dart';
-import '../widgets/anime_card.dart';
 import '../widgets/browse_card.dart';
 import '../widgets/history_card.dart';
 import '../widgets/shimmer.dart';
@@ -16,6 +15,7 @@ import 'episode_screen.dart';
 import 'settings_screen.dart';
 import 'airing_screen.dart';
 import 'watchlist_screen.dart';
+import 'search_screen.dart';
 
 const _cyan = Color(0xFF00d4d4);
 const _bg = Color(0xFF0a0b0f);
@@ -30,6 +30,7 @@ const _browseRows = [
   {'label': 'Currently airing', 'query': 'status: RELEASING, sort: POPULARITY_DESC'},
   {'label': 'Trending now', 'query': 'sort: TRENDING_DESC'},
   {'label': 'All time popular', 'query': 'sort: POPULARITY_DESC'},
+  {'label': 'Top rated', 'query': 'sort: SCORE_DESC'},
   {'label': 'Action', 'query': 'genre: "Action", sort: POPULARITY_DESC'},
   {'label': 'Adventure', 'query': 'genre: "Adventure", sort: POPULARITY_DESC'},
   {'label': 'Fantasy', 'query': 'genre: "Fantasy", sort: POPULARITY_DESC'},
@@ -37,6 +38,15 @@ const _browseRows = [
   {'label': 'Romance', 'query': 'genre: "Romance", sort: POPULARITY_DESC'},
   {'label': 'Horror', 'query': 'genre: "Horror", sort: POPULARITY_DESC'},
   {'label': 'Comedy', 'query': 'genre: "Comedy", sort: POPULARITY_DESC'},
+  {'label': 'Drama', 'query': 'genre: "Drama", sort: POPULARITY_DESC'},
+  {'label': 'Slice of Life', 'query': 'genre: "Slice of Life", sort: POPULARITY_DESC'},
+  {'label': 'Mystery', 'query': 'genre: "Mystery", sort: POPULARITY_DESC'},
+  {'label': 'Psychological', 'query': 'genre: "Psychological", sort: POPULARITY_DESC'},
+  {'label': 'Supernatural', 'query': 'genre: "Supernatural", sort: POPULARITY_DESC'},
+  {'label': 'Mecha', 'query': 'genre: "Mecha", sort: POPULARITY_DESC'},
+  {'label': 'Sports', 'query': 'genre: "Sports", sort: POPULARITY_DESC'},
+  {'label': 'Music', 'query': 'genre: "Music", sort: POPULARITY_DESC'},
+  {'label': 'Thriller', 'query': 'genre: "Thriller", sort: POPULARITY_DESC'},
 ];
 
 class HomeScreen extends StatefulWidget {
@@ -49,10 +59,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late TabController _tabController;
   final _searchController = TextEditingController();
   String _provider = 'allanime';
-  List<AnimeResult> _searchResults = [];
-  List<AnilistMedia> _anilistResults = [];
-  bool _searching = false;
-  String? _searchError;
   final Map<String, List<AnilistMedia>> _browseCache = {};
   final Map<String, String> _browseErrors = {};
   bool _isMaximized = false;
@@ -99,25 +105,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _search() async {
-    final q = _searchController.text.trim();
-    if (q.isEmpty) return;
-    setState(() { _searching = true; _searchError = null; _searchResults = []; _anilistResults = []; });
-    try {
-      final api = context.read<ApiService>();
-      final results = await Future.wait([
-        api.search(q, _provider),
-        api.anilistSearch(q),
-      ]);
-      setState(() {
-        _searchResults = results[0] as List<AnimeResult>;
-        _anilistResults = results[1] as List<AnilistMedia>;
-        _searching = false;
-      });
-    } catch (e) {
-      setState(() { _searchError = e.toString(); _searching = false; });
-    }
-  }
 
   void _openDetail(AnilistMedia media) {
     Navigator.push(context, MaterialPageRoute(
@@ -125,11 +112,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ));
   }
 
-  void _openDetailByName(String name) async {
-    final api = context.read<ApiService>();
-    final media = await api.fetchAnilistByName(name);
-    if (media != null && mounted) _openDetail(media);
-  }
 
   void _openEpisodes(AnimeResult anime) {
     Navigator.push(context, MaterialPageRoute(
@@ -206,18 +188,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               if (_featured != null) _openDetail(_featured!);
             },
           ),
-          _SearchTab(
-            controller: _searchController,
-            provider: _provider,
-            results: _searchResults,
-            anilistResults: _anilistResults,
-            searching: _searching,
-            error: _searchError,
-            onProviderChanged: (v) => setState(() => _provider = v!),
-            onSearch: _search,
-            onResultTap: _openDetailByName,
-            onAnilistTap: _openDetail,
-          ),
+          SearchScreen(provider: _provider),
           WatchlistScreen(provider: _provider),
         ],
       ),
@@ -713,208 +684,6 @@ class _ScrollableRowState extends State<_ScrollableRow> {
             ),
         ],
       ),
-    );
-  }
-}
-
-// --- SEARCH TAB ---
-class _SearchTab extends StatelessWidget {
-  final TextEditingController controller;
-  final String provider;
-  final List<AnimeResult> results;
-  final List<AnilistMedia> anilistResults;
-  final bool searching;
-  final String? error;
-  final void Function(String?) onProviderChanged;
-  final VoidCallback onSearch;
-  final void Function(String) onResultTap;
-  final void Function(AnilistMedia) onAnilistTap;
-
-  const _SearchTab({
-    required this.controller, required this.provider,
-    required this.results, required this.anilistResults,
-    required this.searching, required this.error,
-    required this.onProviderChanged, required this.onSearch,
-    required this.onResultTap, required this.onAnilistTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasResults = results.isNotEmpty || anilistResults.isNotEmpty;
-    return Column(
-      children: [
-        Container(
-          color: _bg3,
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Expanded(
-              child: Container(
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _bg2,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _border),
-                ),
-                child: Row(children: [
-                  const SizedBox(width: 12),
-                  const Icon(Icons.search, color: _textMuted, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      style: const TextStyle(fontSize: 13, color: _textPrimary),
-                      decoration: const InputDecoration(
-                        hintText: 'Search anime...',
-                        hintStyle: TextStyle(color: _textMuted, fontSize: 13),
-                        border: InputBorder.none, isDense: true,
-                      ),
-                      onSubmitted: (_) => onSearch(),
-                    ),
-                  ),
-                ]),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: _bg2, borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _border),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: provider, dropdownColor: _bg2,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textMuted),
-                  items: const [
-                    DropdownMenuItem(value: 'allanime', child: Text('ALLANIME')),
-                    DropdownMenuItem(value: 'animekai', child: Text('ANIMEKAI')),
-                  ],
-                  onChanged: onProviderChanged,
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: onSearch,
-              child: Container(
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                decoration: BoxDecoration(
-                  color: _cyan, borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Center(
-                  child: Text('SEARCH', style: TextStyle(
-                    fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w700,
-                    color: Color(0xFF0a0b0f), letterSpacing: 1,
-                  )),
-                ),
-              ),
-            ),
-          ]),
-        ),
-        const Divider(color: _border, height: 1),
-        Expanded(
-          child: searching
-              ? const Center(child: CircularProgressIndicator(color: _cyan, strokeWidth: 2))
-              : error != null
-                  ? Center(child: Text('Error: $error', style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFFd44000))))
-                  : !hasResults
-                      ? Center(
-                          child: Column(mainAxisSize: MainAxisSize.min, children: [
-                            const Icon(Icons.search, color: _textMuted, size: 40),
-                            const SizedBox(height: 12),
-                            const Text('Search for anime', style: TextStyle(fontSize: 15, color: _textSecondary, fontWeight: FontWeight.w500)),
-                            const SizedBox(height: 4),
-                            Text('Results from AniList and $provider', style: const TextStyle(fontSize: 13, color: _textMuted)),
-                          ]),
-                        )
-                      : Row(children: [
-                          if (anilistResults.isNotEmpty)
-                            SizedBox(
-                              width: 220,
-                              child: Column(children: [
-                                Container(
-                                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                                  color: _bg3,
-                                  child: const Row(children: [
-                                    Text('ANILIST', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textMuted, letterSpacing: 2)),
-                                  ]),
-                                ),
-                                const Divider(color: _border, height: 1),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: anilistResults.length,
-                                    itemBuilder: (context, i) {
-                                      final m = anilistResults[i];
-                                      return InkWell(
-                                        onTap: () => onAnilistTap(m),
-                                        child: Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: const BoxDecoration(
-                                            border: Border(bottom: BorderSide(color: _border, width: 0.5)),
-                                          ),
-                                          child: Row(children: [
-                                            if (m.coverImage != null)
-                                              ClipRRect(
-                                                borderRadius: BorderRadius.circular(4),
-                                                child: Image.network(m.coverImage!, width: 38, height: 54, fit: BoxFit.cover,
-                                                  errorBuilder: (_, __, ___) => Container(width: 38, height: 54, color: _bg2)),
-                                              )
-                                            else Container(width: 38, height: 54, color: _bg2, decoration: BoxDecoration(borderRadius: BorderRadius.circular(4))),
-                                            const SizedBox(width: 10),
-                                            Expanded(child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(m.title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: _textPrimary, height: 1.3)),
-                                                if (m.averageScore != null)
-                                                  Padding(
-                                                    padding: const EdgeInsets.only(top: 4),
-                                                    child: Text('★ ${(m.averageScore! / 10).toStringAsFixed(1)}',
-                                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan)),
-                                                  ),
-                                              ],
-                                            )),
-                                          ]),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ]),
-                            ),
-                          if (anilistResults.isNotEmpty)
-                            const VerticalDivider(color: _border, width: 1),
-                          Expanded(
-                            child: results.isEmpty
-                                ? const Center(child: Text('No provider results', style: TextStyle(fontSize: 13, color: _textMuted)))
-                                : Column(children: [
-                                    Container(
-                                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                                      color: _bg3,
-                                      child: Row(children: [
-                                        Text(provider.toUpperCase(), style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textMuted, letterSpacing: 2)),
-                                      ]),
-                                    ),
-                                    const Divider(color: _border, height: 1),
-                                    Expanded(
-                                      child: GridView.builder(
-                                        padding: const EdgeInsets.all(16),
-                                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                          maxCrossAxisExtent: 200, childAspectRatio: 1.6, crossAxisSpacing: 8, mainAxisSpacing: 8,
-                                        ),
-                                        itemCount: results.length,
-                                        itemBuilder: (context, i) => AnimeCardWidget(
-                                          anime: results[i], onTap: () => onResultTap(results[i].name),
-                                        ),
-                                      ),
-                                    ),
-                                  ]),
-                          ),
-                        ]),
-        ),
-      ],
     );
   }
 }
