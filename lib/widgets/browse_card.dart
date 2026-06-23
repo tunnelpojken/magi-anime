@@ -37,6 +37,7 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
           width: 128,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 150),

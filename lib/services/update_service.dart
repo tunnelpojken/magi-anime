@@ -33,6 +33,14 @@ class UpdateService {
       final latestTag = (data['tag_name'] as String).replaceAll('v', '');
       final releaseUrl = data['html_url'] as String;
       final assets = data['assets'] as List? ?? [];
+      // Strip markdown from release notes
+      final rawNotes = data['body'] as String? ?? '';
+      final releaseNotes = rawNotes
+          .replaceAll(RegExp(r'#{1,6}\s*'), '')
+          .replaceAll(RegExp(r'\*\*|__'), '')
+          .replaceAll(RegExp(r'\*|_'), '')
+          .replaceAll(RegExp(r'`'), '')
+          .trim();
 
       if (!_isNewer(latestTag, currentVersion)) return;
       if (!context.mounted) return;
@@ -44,9 +52,9 @@ class UpdateService {
           orElse: () => null,
         );
         final downloadUrl = linuxAsset?['browser_download_url'] as String?;
-        _showLinuxUpdateDialog(context, latestTag, downloadUrl, currentVersion);
+        _showLinuxUpdateDialog(context, latestTag, downloadUrl, currentVersion, releaseNotes);
       } else {
-        _showNotifyDialog(context, latestTag, releaseUrl, currentVersion);
+        _showNotifyDialog(context, latestTag, releaseUrl, currentVersion, releaseNotes);
       }
     } catch (_) {}
   }
@@ -63,7 +71,7 @@ class UpdateService {
     return false;
   }
 
-  static void _showNotifyDialog(BuildContext context, String version, String url, String currentVersion) {
+  static void _showNotifyDialog(BuildContext context, String version, String url, String currentVersion, String notes) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -72,7 +80,7 @@ class UpdateService {
         title: Text('UPDATE AVAILABLE — v$version',
           style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: _cyan, letterSpacing: 1)),
         content: Text(
-          'A new version of MAGI is available.\nCurrent: v$currentVersion\nLatest: v$version',
+          'Current: v$currentVersion → v$version\n\n$notes'.trim(),
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8),
         ),
         actions: [
@@ -94,11 +102,11 @@ class UpdateService {
     );
   }
 
-  static void _showLinuxUpdateDialog(BuildContext context, String version, String? downloadUrl, String currentVersion) {
+  static void _showLinuxUpdateDialog(BuildContext context, String version, String? downloadUrl, String currentVersion, String notes) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _LinuxUpdateDialog(version: version, downloadUrl: downloadUrl, currentVersion: currentVersion),
+      builder: (ctx) => _LinuxUpdateDialog(version: version, downloadUrl: downloadUrl, currentVersion: currentVersion, notes: notes),
     );
   }
 }
@@ -107,7 +115,8 @@ class _LinuxUpdateDialog extends StatefulWidget {
   final String version;
   final String? downloadUrl;
   final String currentVersion;
-  const _LinuxUpdateDialog({required this.version, required this.downloadUrl, required this.currentVersion});
+  final String notes;
+  const _LinuxUpdateDialog({required this.version, required this.downloadUrl, required this.currentVersion, required this.notes});
 
   @override
   State<_LinuxUpdateDialog> createState() => _LinuxUpdateDialogState();
@@ -195,7 +204,7 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
                 Text(_status, style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textDim)),
               ])
             : Text(
-                'Current: v\${widget.currentVersion}\nLatest: v\${widget.version}\n\nMAGI will update and restart automatically.',
+                'Current: v\${widget.currentVersion} → v\${widget.version}\n\n\${widget.notes}\n\nMAGI will update and restart automatically.',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8),
               ),
       ),

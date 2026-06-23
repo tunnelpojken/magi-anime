@@ -14,7 +14,7 @@ const _cyan = Color(0xFF00d4d4);
 const _bg2 = Color(0xFF0f1117);
 const _bg3 = Color(0xFF151720);
 const _border = Color(0xFF1e2130);
-const _textDim = Color(0xFF5a6080);
+const _textDim = Color(0xFF7a8090);
 const _red = Color(0xFFd44000);
 
 class EpisodeScreen extends StatefulWidget {
@@ -38,6 +38,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   bool _loadingStream = false;
   final _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _panelScrollController = ScrollController();
 
   late final Player _player;
   late final VideoController _videoController;
@@ -52,6 +53,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   double _volume = 100;
   bool _isFullscreen = false;
   bool _showCursor = true;
+  bool _showEpisodePanel = false;
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
   StreamSubscription? _playSub;
@@ -203,6 +205,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     _player.dispose();
     _searchController.dispose();
     _scrollController.dispose();
+    _panelScrollController.dispose();
     super.dispose();
   }
 
@@ -678,6 +681,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         onNextEpisode: _playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1
                             ? () { final idx = _episodes.indexOf(_playingEp!); if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]); }
                             : null,
+                        onEpisodes: () => setState(() => _showEpisodePanel = !_showEpisodePanel),
                       ),
                     if (_showNextEpPrompt)
                       _NextEpPrompt(
@@ -702,12 +706,13 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                       }),
                   ],
                 )
-              : Column(
+              : Stack(
+            children: [
+              Column(
             children: [
               // Video player with overlay
               if (_playingEp != null)
-                SizedBox(
-                  height: screenH * 0.65,
+                Expanded(
                   child: Stack(
                     children: [
                       Container(
@@ -761,6 +766,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           onNextEpisode: _playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1
                               ? () { final idx = _episodes.indexOf(_playingEp!); if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]); }
                               : null,
+                          onEpisodes: () => setState(() => _showEpisodePanel = !_showEpisodePanel),
                         ),
                       // Next episode prompt
                       if (_showNextEpPrompt)
@@ -787,111 +793,120 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                     ],
                   ),
                 ),
-
-              // Lang toggle
-              Container(
-                color: _bg2,
-                child: Row(children: [_langBtn('SUB', 'sub'), _langBtn('DUB', 'dub')]),
-              ),
-              const Divider(color: _border, height: 1),
-
-              // Episode list header with jump to next unwatched
-              Container(
-                color: _bg2,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Row(
-                  children: [
-                    if (_episodes.length > 20)
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFFc8ccd8)),
-                          decoration: InputDecoration(
-                            hintText: 'JUMP TO EPISODE...',
-                            hintStyle: const TextStyle(fontFamily: 'monospace', color: _textDim, fontSize: 12),
-                            filled: true, fillColor: _bg3, isDense: true,
-                            prefixIcon: const Icon(Icons.search, color: _textDim, size: 16),
-                            border: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
-                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
-                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _cyan), borderRadius: BorderRadius.zero),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          ),
-                        ),
-                      )
-                    else
-                      const Spacer(),
-                    const SizedBox(width: 8),
-                    // Next episode button — only show when an episode is playing and there's a next one
-                    if (_playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1)
+              if (_playingEp == null)
+                Expanded(
+                  child: Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.play_circle_outline, color: _textDim, size: 64),
+                      const SizedBox(height: 16),
+                      const Text('SELECT AN EPISODE', style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim, letterSpacing: 3)),
+                      const SizedBox(height: 8),
                       GestureDetector(
-                        onTap: () {
-                          final idx = _episodes.indexOf(_playingEp!);
-                          if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]);
-                        },
+                        onTap: () => setState(() => _showEpisodePanel = true),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(border: Border.all(color: _cyan.withOpacity(0.4))),
-                          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                            Text('NEXT EP', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan, letterSpacing: 1)),
-                            SizedBox(width: 4),
-                            Icon(Icons.skip_next, color: _cyan, size: 14),
-                          ]),
+                          margin: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: _cyan.withOpacity(0.4)),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text('EPISODES', style: TextStyle(fontFamily: 'monospace', fontSize: 11, color: _cyan, letterSpacing: 2)),
                         ),
                       ),
-                    GestureDetector(
-                      onTap: _jumpToNextUnwatched,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                        decoration: BoxDecoration(border: Border.all(color: _cyan.withOpacity(0.4))),
-                        child: const Text('NEXT UNWATCHED', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _cyan, letterSpacing: 1)),
-                      ),
-                    ),
-                  ],
+                    ]),
+                  ),
                 ),
-              ),
-              const Divider(color: _border, height: 1),
 
-              // Episode list
-              Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: _cyan))
-                    : _error != null
-                        ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                            Text('ERROR: $_error', style: const TextStyle(fontFamily: 'monospace', color: _red, fontSize: 12)),
-                            const SizedBox(height: 16),
-                            GestureDetector(onTap: _loadEpisodes,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                                decoration: BoxDecoration(border: Border.all(color: _cyan.withOpacity(0.5))),
-                                child: const Text('RETRY', style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: _cyan, letterSpacing: 2)),
-                              )),
-                          ]))
-                        : _filtered.isEmpty
-                            ? const Center(child: Text('NO EPISODES FOUND', style: TextStyle(fontFamily: 'monospace', color: _textDim, fontSize: 12, letterSpacing: 2)))
-                            : ListView.builder(
-                                controller: _scrollController,
-                                itemCount: _filtered.length,
-                                itemExtent: 49,
-                                itemBuilder: (context, i) {
-                                  final ep = _filtered[i];
-                                  final isWatched = lastEp != null && ep < lastEp;
-                                  final isCurrent = lastEp != null && ep == lastEp;
-                                  final isPlaying = ep == _playingEp;
-                                  final progress = isCurrent ? saved?.progress : null;
-                                  return _EpisodeItem(
-                                    episode: ep,
-                                    isWatched: isWatched,
-                                    isCurrent: isCurrent,
-                                    isPlaying: isPlaying,
-                                    progress: progress,
-                                    onTap: () => _playEpisode(ep, resumeFrom: isCurrent ? saved?.progress : null),
-                                  );
-                                },
-                              ),
-              ),
             ],
           ), // end Column (non-fullscreen)
+          // Dimmed backdrop when panel open
+          if (_showEpisodePanel)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _showEpisodePanel = false),
+                child: Container(color: Colors.black54),
+              ),
+            ),
+          // Episode panel slides in from right
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+            right: _showEpisodePanel ? 0 : -320,
+            top: 0, bottom: 0,
+            width: 300,
+            child: Container(
+              color: const Color(0xFF0d0f18),
+              child: Column(children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+                  color: const Color(0xFF111827),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(widget.anime.name, style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFe2e8f0),
+                      ), overflow: TextOverflow.ellipsis),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: _textDim, size: 18),
+                      onPressed: () => setState(() => _showEpisodePanel = false),
+                    ),
+                  ]),
+                ),
+                Container(
+                  color: const Color(0xFF111827),
+                  child: Row(children: [_langBtn('SUB', 'sub'), _langBtn('DUB', 'dub')]),
+                ),
+                const Divider(color: _border, height: 1),
+                if (_episodes.length > 20)
+                  Container(
+                    color: const Color(0xFF111827),
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    child: TextField(
+                      controller: _searchController,
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFFc8ccd8)),
+                      decoration: InputDecoration(
+                        hintText: 'JUMP TO EPISODE...',
+                        hintStyle: const TextStyle(fontFamily: 'monospace', color: _textDim, fontSize: 12),
+                        filled: true, fillColor: const Color(0xFF0d0f18), isDense: true,
+                        prefixIcon: const Icon(Icons.search, color: _textDim, size: 16),
+                        border: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: _border), borderRadius: BorderRadius.zero),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: _cyan), borderRadius: BorderRadius.zero),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                    ),
+                  ),
+                const Divider(color: _border, height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    controller: _panelScrollController,
+                    itemCount: _filtered.length,
+                    itemExtent: 49,
+                    itemBuilder: (context, i) {
+                      final ep = _filtered[i];
+                      final isWatched = lastEp != null && ep < lastEp;
+                      final isCurrent = lastEp != null && ep == lastEp;
+                      final isPlaying = ep == _playingEp;
+                      final progress = isCurrent ? saved?.progress : null;
+                      return _EpisodeItem(
+                        episode: ep,
+                        isWatched: isWatched,
+                        isCurrent: isCurrent,
+                        isPlaying: isPlaying,
+                        progress: progress,
+                        onTap: () {
+                          setState(() => _showEpisodePanel = false);
+                          _playEpisode(ep, resumeFrom: isCurrent ? saved?.progress : null);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ],
+      ),
         ),
       ),
     );
@@ -934,6 +949,7 @@ class _PlayerOverlay extends StatelessWidget {
   final VoidCallback onFullscreen;
   final bool isFullscreen;
   final VoidCallback? onNextEpisode;
+  final VoidCallback? onEpisodes;
 
   const _PlayerOverlay({
     required this.position,
@@ -951,6 +967,7 @@ class _PlayerOverlay extends StatelessWidget {
     required this.onFullscreen,
     required this.isFullscreen,
     this.onNextEpisode,
+    this.onEpisodes,
   });
 
   String _fmt(Duration d) {
@@ -1027,6 +1044,13 @@ class _PlayerOverlay extends StatelessWidget {
                   tooltip: 'Next episode',
                 ),
               const Spacer(),
+              // Episodes button
+              if (onEpisodes != null)
+                IconButton(
+                  icon: const Icon(Icons.format_list_bulleted, color: Colors.white70, size: 20),
+                  onPressed: onEpisodes,
+                  tooltip: 'Episodes',
+                ),
               // Cast button
               IconButton(
                 icon: Icon(Icons.cast, color: isCasting ? const Color(0xFF00d4d4) : Colors.white54, size: 20),

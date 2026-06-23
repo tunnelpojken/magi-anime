@@ -29,6 +29,7 @@ class AnilistMedia {
   final List<String> genres;
   final String? trailerId;
   final List<AnilistRelation> relations;
+  final List<AnilistMedia> recommendations;
 
   AnilistMedia({
     required this.id,
@@ -45,6 +46,7 @@ class AnilistMedia {
     required this.genres,
     this.trailerId,
     this.relations = const [],
+    this.recommendations = const [],
   });
 
   factory AnilistMedia.fromJson(Map<String, dynamic> json) {
@@ -68,6 +70,11 @@ class AnilistMedia {
       genres: List<String>.from(json['genres'] ?? []),
       trailerId: (trailer != null && trailer['site'] == 'youtube') ? trailer['id'] as String? : null,
       relations: edges.map((e) => AnilistRelation.fromJson(e as Map<String, dynamic>)).toList(),
+      recommendations: ((json['recommendations']?['nodes'] as List?) ?? [])
+          .map((n) => n['mediaRecommendation'])
+          .where((m) => m != null)
+          .map((m) => AnilistMedia.fromJson(m as Map<String, dynamic>))
+          .toList(),
     );
   }
 }

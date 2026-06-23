@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/transitions.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -7,10 +8,10 @@ import '../services/watchlist_service.dart';
 import 'episode_screen.dart';
 
 const _cyan = Color(0xFF00d4d4);
-const _bg2 = Color(0xFF0f1117);
-const _bg3 = Color(0xFF151720);
+const _bg2 = Color(0xFF111827);
+const _bg3 = Color(0xFF0d0f18);
 const _border = Color(0xFF1e2130);
-const _textDim = Color(0xFF5a6080);
+const _textDim = Color(0xFF475569);
 
 class DetailScreen extends StatelessWidget {
   final AnilistMedia media;
@@ -37,7 +38,7 @@ class DetailScreen extends StatelessWidget {
       final anime = results.first;
       final saved = history.getEntry(anime.id);
       final screen = EpisodeScreen(anime: anime, anilistMedia: media, autoPlay: saved?.episode ?? 1.0, autoPlayResume: saved?.progress);
-      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+      Navigator.push(context, fadeSlideRoute(screen));
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context);
@@ -189,8 +190,67 @@ class DetailScreen extends StatelessWidget {
               ),
             ],
 
-            // Trailer
-            if (media.trailerId != null) ...[
+            // Recommendations
+            if (media.recommendations.isNotEmpty) ...[
+            if (media.recommendations.isNotEmpty) ...[
+              const Divider(color: _border, height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: _sectionLabel('YOU MIGHT ALSO LIKE'),
+              ),
+              SizedBox(
+                height: 220,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                  itemCount: media.recommendations.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (context, i) {
+                    final rec = media.recommendations[i];
+                    return GestureDetector(
+                      onTap: () => Navigator.push(context, fadeSlideRoute(
+                        DetailScreen(media: rec, provider: provider),
+                      )),
+                      child: SizedBox(
+                        width: 110,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Stack(
+                              children: [
+                                rec.coverImage != null
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Image.network(rec.coverImage!, width: 110, height: 154, fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => Container(width: 110, height: 154, color: _bg3)))
+                                    : Container(width: 110, height: 154, color: _bg3, decoration: BoxDecoration(borderRadius: BorderRadius.circular(6))),
+                                if (rec.averageScore != null)
+                                  Positioned(
+                                    top: 6, right: 6,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xE50a0b0f),
+                                        borderRadius: BorderRadius.circular(3),
+                                        border: Border.all(color: _cyan.withOpacity(0.4)),
+                                      ),
+                                      child: Text('★ ${(rec.averageScore! / 10).toStringAsFixed(1)}',
+                                        style: const TextStyle(fontFamily: 'monospace', fontSize: 9, color: _cyan)),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(rec.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, color: Color(0xFFcbd5e1), height: 1.3)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
               const Divider(color: _border, height: 1),
               Padding(
                 padding: const EdgeInsets.all(20),

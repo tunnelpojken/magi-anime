@@ -22,6 +22,18 @@ const _mediaFields = '''
       }
     }
   }
+  recommendations(perPage: 8, sort: RATING_DESC) {
+    nodes {
+      mediaRecommendation {
+        id
+        title { english romaji native }
+        coverImage { large }
+        averageScore
+        episodes
+        status
+      }
+    }
+  }
 ''';
 
 class ApiService extends ChangeNotifier {
@@ -140,6 +152,27 @@ class ApiService extends ChangeNotifier {
     } catch (e) {
       return null;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAiringSchedule(int from, int to) async {
+    final data = await _anilistQuery('''
+      query(\$from: Int, \$to: Int) {
+        Page(page: 1, perPage: 50) {
+          airingSchedules(airingAt_greater: \$from, airingAt_lesser: \$to, sort: TIME) {
+            airingAt
+            episode
+            media {
+              id
+              title { english romaji }
+              coverImage { large }
+              averageScore
+              status
+            }
+          }
+        }
+      }
+    ''', {'from': from, 'to': to});
+    return List<Map<String, dynamic>>.from(data['Page']?['airingSchedules'] ?? []);
   }
 
   Future<List<AnilistMedia>> anilistSearch(String query) async {

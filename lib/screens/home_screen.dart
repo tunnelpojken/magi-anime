@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/transitions.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../services/api_service.dart';
@@ -13,7 +14,7 @@ import '../widgets/shimmer.dart';
 import 'detail_screen.dart';
 import 'episode_screen.dart';
 import 'settings_screen.dart';
-import 'seasonal_screen.dart';
+import 'airing_screen.dart';
 import 'watchlist_screen.dart';
 
 const _cyan = Color(0xFF00d4d4);
@@ -23,7 +24,7 @@ const _bg3 = Color(0xFF0d0f18);
 const _border = Color(0xFF1e2130);
 const _textPrimary = Color(0xFFe2e8f0);
 const _textSecondary = Color(0xFF94a3b8);
-const _textMuted = Color(0xFF475569);
+const _textMuted = Color(0xFF64748b);
 
 const _browseRows = [
   {'label': 'Currently airing', 'query': 'status: RELEASING, sort: POPULARITY_DESC'},
@@ -169,9 +170,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 _NavTab(label: 'WATCHLIST', active: _tabController.index == 2, onTap: () => setState(() => _tabController.index = 2)),
                 const Spacer(),
                 // Right icons
-                _IconBtn(icon: Icons.calendar_month_outlined, onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => SeasonalScreen(provider: _provider),
-                ))),
+                _IconBtn(icon: Icons.calendar_month_outlined, onTap: () => Navigator.push(context, fadeSlideRoute(AiringScheduleScreen(provider: _provider)))),
                 _IconBtn(icon: Icons.settings_outlined, onTap: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => const SettingsScreen(),
                 ))),
@@ -256,7 +255,7 @@ class _NavTabState extends State<_NavTab> {
           ),
           child: Text(widget.label, style: TextStyle(
             fontFamily: 'monospace', fontSize: 11, letterSpacing: 2,
-            color: widget.active ? _textPrimary : _hovered ? _textSecondary : _textMuted,
+            color: widget.active ? _textPrimary : _hovered ? _textPrimary : _textSecondary,
           )),
         ),
       ),
@@ -445,7 +444,7 @@ class _HeroSection extends StatelessWidget {
   Widget build(BuildContext context) {
     if (media == null) {
       return Container(
-        height: 220,
+        height: 250,
         color: const Color(0xFF0d0f18),
         child: const Center(child: CircularProgressIndicator(color: _cyan, strokeWidth: 2)),
       );
@@ -657,7 +656,7 @@ class _ScrollableRowState extends State<_ScrollableRow> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 220,
+      height: 250,
       child: Stack(
         children: [
           widget.loading
