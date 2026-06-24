@@ -12,6 +12,7 @@ class WatchlistEntry {
   final int? episodes;
   final String? status;
   final DateTime addedAt;
+  final bool finished;
 
   WatchlistEntry({
     required this.anilistId,
@@ -20,7 +21,14 @@ class WatchlistEntry {
     this.episodes,
     this.status,
     required this.addedAt,
+    this.finished = false,
   });
+
+  WatchlistEntry copyWith({bool? finished}) => WatchlistEntry(
+    anilistId: anilistId, title: title, coverImage: coverImage,
+    episodes: episodes, status: status, addedAt: addedAt,
+    finished: finished ?? this.finished,
+  );
 
   Map<String, dynamic> toJson() => {
     'anilistId': anilistId,
@@ -29,6 +37,7 @@ class WatchlistEntry {
     'episodes': episodes,
     'status': status,
     'addedAt': addedAt.millisecondsSinceEpoch,
+    'finished': finished,
   };
 
   factory WatchlistEntry.fromJson(Map<String, dynamic> j) => WatchlistEntry(
@@ -38,6 +47,7 @@ class WatchlistEntry {
     episodes: j['episodes'],
     status: j['status'],
     addedAt: DateTime.fromMillisecondsSinceEpoch(j['addedAt']),
+    finished: j['finished'] ?? false,
   );
 
   factory WatchlistEntry.fromMedia(AnilistMedia m) => WatchlistEntry(
@@ -47,6 +57,7 @@ class WatchlistEntry {
     episodes: m.episodes,
     status: m.status,
     addedAt: DateTime.now(),
+    finished: false,
   );
 }
 
@@ -86,6 +97,14 @@ class WatchlistService extends ChangeNotifier {
 
   Future<void> remove(int anilistId) async {
     _entries.removeWhere((e) => e.anilistId == anilistId);
+    await _persist();
+    notifyListeners();
+  }
+
+  Future<void> markFinished(int anilistId, bool finished) async {
+    final idx = _entries.indexWhere((e) => e.anilistId == anilistId);
+    if (idx < 0) return;
+    _entries[idx] = _entries[idx].copyWith(finished: finished);
     await _persist();
     notifyListeners();
   }

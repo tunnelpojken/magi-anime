@@ -344,6 +344,16 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     _playEpisode(nextUnwatched);
   }
 
+  void _preCacheNextEpisode(double currentEp) {
+    final idx = _episodes.indexOf(currentEp);
+    if (idx < 0 || idx >= _episodes.length - 1) return;
+    final nextEp = _episodes[idx + 1];
+    // Fire and forget — just warm up the server cache
+    final api = context.read<ApiService>();
+    api.getStreamUrl(widget.anime.id, nextEp, widget.anime.provider, _lang)
+        .catchError((_) => '');
+  }
+
   void _showSpeedPicker() {
     const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
     showDialog(
@@ -587,6 +597,8 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
       await history.save(widget.anime.id, widget.anime.name, widget.anime.provider, ep, _lang);
       if (mounted) setState(() { _loadingStream = false; _playerReady = true; });
       _startProgressTimer();
+      // Pre-cache next episode URL in background
+      _preCacheNextEpisode(ep);
       _scrollToEpisode(ep);
     } catch (e) {
       if (mounted) {
@@ -634,7 +646,51 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
       case LogicalKeyboardKey.escape:
         if (_isFullscreen) _toggleFullscreen();
         break;
+      case LogicalKeyboardKey.keyM:
+        setState(() => _volume = _volume > 0 ? 0 : 100);
+        _player.setVolume(_volume);
+        _keepOverlay();
+        break;
+      case LogicalKeyboardKey.question:
+        _showShortcutsOverlay();
+        break;
     }
+  }
+
+  void _showShortcutsOverlay() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0d0f18),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('KEYBOARD SHORTCUTS', style: TextStyle(
+          fontFamily: 'monospace', fontSize: 12, color: _cyan, letterSpacing: 2,
+        )),
+        content: const SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ShortcutRow('Space', 'Play / Pause'),
+              _ShortcutRow('→', 'Skip forward 10s'),
+              _ShortcutRow('←', 'Skip back 10s'),
+              _ShortcutRow('↑', 'Volume up'),
+              _ShortcutRow('↓', 'Volume down'),
+              _ShortcutRow('M', 'Mute / Unmute'),
+              _ShortcutRow('F', 'Toggle fullscreen'),
+              _ShortcutRow('Esc', 'Exit fullscreen'),
+              _ShortcutRow('?', 'Show this overlay'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CLOSE', style: TextStyle(fontFamily: 'monospace', color: _textDim)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -1306,6 +1362,34 @@ class _SkipButton extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+class _ShortcutRow extends StatelessWidget {
+  final String keyLabel;
+  final String description;
+  const _ShortcutRow(this.keyLabel, this.description);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(children: [
+        Container(
+          width: 80,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1e2130),
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: const Color(0xFF2e3150)),
+          ),
+          child: Text(keyLabel, textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFF00d4d4))),
+        ),
+        const SizedBox(width: 16),
+        Text(description, style: const TextStyle(fontSize: 13, color: Color(0xFF94a3b8))),
+      ]),
     );
   }
 }

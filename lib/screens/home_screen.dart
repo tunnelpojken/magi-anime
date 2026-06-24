@@ -49,6 +49,7 @@ const _browseRows = [
   {'label': 'Sports', 'query': 'genre: "Sports", sort: POPULARITY_DESC'},
   {'label': 'Music', 'query': 'genre: "Music", sort: POPULARITY_DESC'},
   {'label': 'Thriller', 'query': 'genre: "Thriller", sort: POPULARITY_DESC'},
+  {'label': 'Isekai', 'query': 'tag: "Isekai", sort: POPULARITY_DESC'},
 ];
 
 class HomeScreen extends StatefulWidget {
