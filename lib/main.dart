@@ -8,6 +8,7 @@ import 'services/watchlist_service.dart';
 import 'services/cast_service.dart';
 import 'services/search_history_service.dart';
 import 'services/health_service.dart';
+import 'services/prefs_service.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
@@ -31,6 +32,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => WatchlistService()),
         ChangeNotifierProvider(create: (_) => CastService()),
         ChangeNotifierProvider(create: (_) => SearchHistoryService()),
+        ChangeNotifierProvider(create: (_) => PrefsService()),
         ChangeNotifierProxyProvider<ApiService, HealthService>(
           create: (ctx) => HealthService(ctx.read<ApiService>()),
           update: (ctx, api, prev) => prev ?? HealthService(api),

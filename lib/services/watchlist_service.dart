@@ -89,4 +89,11 @@ class WatchlistService extends ChangeNotifier {
     await _persist();
     notifyListeners();
   }
+
+  Future<void> clearAll() async {
+    _entries.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_watchlistKey);
+    notifyListeners();
+  }
 }

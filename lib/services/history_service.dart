@@ -46,6 +46,13 @@ class HistoryService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> clearAll() async {
+    _entries.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_historyKey);
+    notifyListeners();
+  }
+
   HistoryEntry? getEntry(String id) {
     try {
       return _entries.firstWhere((e) => e.id == id);

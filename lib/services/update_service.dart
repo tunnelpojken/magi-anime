@@ -90,7 +90,7 @@ class UpdateService {
         title: Text('UPDATE AVAILABLE — v$version',
           style: const TextStyle(fontFamily: 'monospace', fontSize: 13, color: _cyan, letterSpacing: 1)),
         content: Text(
-          'Current: v$currentVersion → v$version\n\n$notes'.trim(),
+          'Current: v$currentVersion → v$version\n\n${notes.isEmpty ? "No patch notes available." : notes}',
           style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8),
         ),
         actions: [
@@ -231,7 +231,7 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
                 Text(_status, style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: _textDim)),
               ])
             : Text(
-                'Current: v\${widget.currentVersion} → v\${widget.version}\n\n\${widget.notes}\n\nMAGI will update and restart automatically.',
+                'Current: v${widget.currentVersion} → v${widget.version}\n\n${widget.notes.isEmpty ? "No patch notes available." : widget.notes}\n\nMAGI will update and restart automatically.',
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _textDim, height: 1.8),
               ),
       ),

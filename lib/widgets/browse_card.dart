@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/models.dart';
+import '../services/prefs_service.dart';
 
 const _bg2 = Color(0xFF111827);
 const _border = Color(0xFF1e2130);
 const _cyan = Color(0xFF00d4d4);
 const _textPrimary = Color(0xFFcbd5e1);
-const _textMuted = Color(0xFF475569);
+const _textMuted = Color(0xFF64748b);
 
 class BrowseCardWidget extends StatefulWidget {
   final AnilistMedia media;
@@ -21,12 +23,17 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final score = widget.media.averageScore != null
+    final prefs = context.watch<PrefsService>();
+    final compact = prefs.compactCards;
+    final cardW = compact ? 96.0 : 128.0;
+    final cardH = compact ? 134.0 : 180.0;
+
+    final score = prefs.showScoreBadge && widget.media.averageScore != null
         ? '★ ${(widget.media.averageScore! / 10).toStringAsFixed(1)}'
         : null;
-    final eps = widget.media.episodes != null
+    final eps = prefs.showEpisodeCount && widget.media.episodes != null
         ? '${widget.media.episodes} EP'
-        : (widget.media.status == 'RELEASING' ? 'AIRING' : '');
+        : (prefs.showEpisodeCount && widget.media.status == 'RELEASING' ? 'AIRING' : '');
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -34,7 +41,7 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: SizedBox(
-          width: 128,
+          width: cardW,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -44,8 +51,8 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
                 transform: Matrix4.identity()..scale(_hovered ? 1.04 : 1.0),
                 transformAlignment: Alignment.center,
                 child: Container(
-                  width: 128,
-                  height: 180,
+                  width: cardW,
+                  height: cardH,
                   decoration: BoxDecoration(
                     color: _bg2,
                     borderRadius: BorderRadius.circular(6),
@@ -58,7 +65,7 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
                           borderRadius: BorderRadius.circular(6),
                           child: Image.network(
                             widget.media.coverImage!,
-                            width: 128, height: 180,
+                            width: cardW, height: cardH,
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => const SizedBox(),
                           ),
@@ -87,12 +94,17 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
                 widget.media.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: _textPrimary, height: 1.35),
+                style: TextStyle(
+                  fontSize: compact ? 11 : 12,
+                  fontWeight: FontWeight.w500,
+                  color: _textPrimary,
+                  height: 1.35,
+                ),
               ),
-              if (eps.isNotEmpty)
+              if (eps.isNotEmpty) ...[
                 const SizedBox(height: 3),
-              if (eps.isNotEmpty)
                 Text(eps, style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textMuted)),
+              ],
             ],
           ),
         ),

@@ -7,6 +7,7 @@ import '../services/history_service.dart';
 import '../services/watchlist_service.dart';
 import '../services/update_service.dart';
 import '../services/health_service.dart';
+import '../services/prefs_service.dart';
 import '../models/models.dart';
 import '../widgets/browse_card.dart';
 import '../widgets/history_card.dart';
@@ -660,8 +661,9 @@ class _ScrollableRowState extends State<_ScrollableRow> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = context.watch<PrefsService>().compactCards;
     return SizedBox(
-      height: 250,
+      height: compact ? 190 : 250,
       child: Stack(
         children: [
           widget.loading
