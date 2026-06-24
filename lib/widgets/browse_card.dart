@@ -31,9 +31,13 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
     final score = prefs.showScoreBadge && widget.media.averageScore != null
         ? '★ ${(widget.media.averageScore! / 10).toStringAsFixed(1)}'
         : null;
-    final eps = prefs.showEpisodeCount && widget.media.episodes != null
-        ? '${widget.media.episodes} EP'
-        : (prefs.showEpisodeCount && widget.media.status == 'RELEASING' ? 'AIRING' : '');
+    final eps = prefs.showEpisodeCount
+        ? (widget.media.episodes != null
+            ? '${widget.media.episodes} EP'
+            : widget.media.status == 'RELEASING'
+                ? 'AIRING'
+                : null)
+        : null;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -101,7 +105,7 @@ class _BrowseCardWidgetState extends State<BrowseCardWidget> {
                   height: 1.35,
                 ),
               ),
-              if (eps.isNotEmpty) ...[
+              if (eps != null) ...[
                 const SizedBox(height: 3),
                 Text(eps, style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: _textMuted)),
               ],

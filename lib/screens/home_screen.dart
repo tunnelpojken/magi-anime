@@ -12,6 +12,7 @@ import '../models/models.dart';
 import '../widgets/browse_card.dart';
 import '../widgets/history_card.dart';
 import '../widgets/shimmer.dart';
+import '../widgets/anime_preview_sheet.dart';
 import 'detail_screen.dart';
 import 'episode_screen.dart';
 import 'settings_screen.dart';
@@ -110,9 +111,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
 
   void _openDetail(AnilistMedia media) {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => DetailScreen(media: media, provider: _provider),
-    ));
+    showAnimePreview(context, media, _provider);
   }
 
 
