@@ -115,15 +115,8 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final history = context.watch<SearchHistoryService>();
 
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor: _bg3,
-        title: const Text('SEARCH', style: TextStyle(fontFamily: 'monospace', fontSize: 13, color: _cyan, letterSpacing: 3)),
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: _textMuted), onPressed: () => Navigator.pop(context)),
-      ),
-      body: Column(
-        children: [
+    return Column(
+      children: [
           // Search bar
           Container(
             color: _bg3,
@@ -373,8 +366,7 @@ class _SearchScreenState extends State<SearchScreen> {
                               ),
           ),
         ],
-      ),
-    );
+      );
   }
 }
 
