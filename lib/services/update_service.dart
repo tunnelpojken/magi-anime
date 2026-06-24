@@ -17,6 +17,16 @@ Future<String> getMagiVersion() async {
   return info.version;
 }
 
+
+Future<String?> _findTerminal() async {
+  final terminals = ['kitty', 'foot', 'alacritty', 'wezterm', 'xterm', 'gnome-terminal'];
+  for (final term in terminals) {
+    final result = await Process.run('which', [term]);
+    if (result.exitCode == 0) return term;
+  }
+  return null;
+}
+
 class UpdateService {
   static Future<void> checkForUpdates(BuildContext context) async {
     try {
@@ -160,18 +170,35 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
 
       setState(() { _status = 'INSTALLING...'; });
 
-      // Write a helper script and run it with pkexec
+      // Write a helper script
       final bundlePath = '$extractPath/bundle';
       final scriptPath = '${tmpDir.path}/magi_install.sh';
       await File(scriptPath).writeAsString(
         '#!/bin/bash\ncp -r "$bundlePath/." /opt/magi-anime/\n'
       );
       await Process.run('chmod', ['+x', scriptPath]);
-      final result = await Process.run('pkexec', [scriptPath]);
 
-      if (result.exitCode != 0) {
-        setState(() { _status = 'ERROR: Auth failed. Run manually:\nsudo cp -r $bundlePath/. /opt/magi-anime/'; });
-        return;
+      // Detect desktop and use appropriate privilege escalation
+      final desktop = Platform.environment['XDG_CURRENT_DESKTOP']?.toLowerCase() ?? '';
+      final isKDE = desktop.contains('kde');
+
+      ProcessResult result;
+      if (isKDE) {
+        result = await Process.run('pkexec', [scriptPath]);
+        if (result.exitCode != 0) {
+          setState(() { _status = 'ERROR: Auth failed. Run manually:\nsudo bash $scriptPath'; });
+          return;
+        }
+      } else {
+        // Find available terminal and spawn sudo in it
+        final terminal = await _findTerminal();
+        if (terminal == null) {
+          setState(() { _status = 'ERROR: No terminal found. Run manually:\nsudo bash $scriptPath'; });
+          return;
+        }
+        await Process.start(terminal, ['--', 'sudo', 'bash', scriptPath]);
+        // Give terminal time to complete before restarting
+        await Future.delayed(const Duration(seconds: 5));
       }
 
       setState(() { _status = 'DONE! RESTARTING...'; });

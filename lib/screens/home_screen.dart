@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/history_service.dart';
 import '../services/watchlist_service.dart';
 import '../services/update_service.dart';
+import '../services/health_service.dart';
 import '../models/models.dart';
 import '../widgets/browse_card.dart';
 import '../widgets/history_card.dart';
@@ -153,9 +154,42 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 const Spacer(),
                 // Right icons
                 _IconBtn(icon: Icons.calendar_month_outlined, onTap: () => Navigator.push(context, fadeSlideRoute(AiringScheduleScreen(provider: _provider)))),
-                _IconBtn(icon: Icons.settings_outlined, onTap: () => Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => const SettingsScreen(),
-                ))),
+                _IconBtn(icon: Icons.settings_outlined, onTap: () => Navigator.push(context, fadeSlideRoute(const SettingsScreen()))),
+                // Server health dot
+                Consumer<HealthService>(builder: (context, health, _) {
+                  final color = switch (health.status) {
+                    ServerHealth.healthy => const Color(0xFF22c55e),
+                    ServerHealth.unhealthy => const Color(0xFFef4444),
+                    ServerHealth.unknown => _textMuted,
+                  };
+                  return Tooltip(
+                    message: switch (health.status) {
+                      ServerHealth.healthy => 'Server online',
+                      ServerHealth.unhealthy => 'Server offline',
+                      ServerHealth.unknown => 'Checking...',
+                    },
+                    child: GestureDetector(
+                      onTap: () => context.read<HealthService>().refresh(),
+                      child: Container(
+                        width: 28, height: 28,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Center(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 400),
+                            width: 8, height: 8,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              boxShadow: health.status == ServerHealth.healthy
+                                  ? [BoxShadow(color: color.withOpacity(0.5), blurRadius: 6)]
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
                 Container(width: 1, height: 16, color: _border, margin: const EdgeInsets.symmetric(horizontal: 8)),
                 _WinBtn(icon: Icons.remove, onTap: () => windowManager.minimize()),
                 _WinBtn(

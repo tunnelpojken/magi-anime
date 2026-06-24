@@ -51,6 +51,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   Duration _duration = Duration.zero;
   bool _isPlaying = false;
   double _volume = 100;
+  double _playbackSpeed = 1.0;
   bool _isFullscreen = false;
   bool _showCursor = true;
   bool _showEpisodePanel = false;
@@ -341,6 +342,44 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
     final lastEp = saved?.episode ?? 0;
     final nextUnwatched = _episodes.firstWhere((e) => e > lastEp, orElse: () => _episodes.first);
     _playEpisode(nextUnwatched);
+  }
+
+  void _showSpeedPicker() {
+    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0d0f18),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        title: const Text('PLAYBACK SPEED', style: TextStyle(fontFamily: 'monospace', fontSize: 12, color: _cyan, letterSpacing: 2)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: speeds.map((s) {
+            final active = s == _playbackSpeed;
+            return GestureDetector(
+              onTap: () {
+                setState(() => _playbackSpeed = s);
+                _player.setRate(s);
+                Navigator.pop(context);
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  color: active ? _cyan.withOpacity(0.15) : Colors.transparent,
+                  border: Border.all(color: active ? _cyan.withOpacity(0.4) : _border),
+                ),
+                child: Text(
+                  s == s.truncateToDouble() ? '${s.toInt()}x' : '${s}x',
+                  style: TextStyle(fontFamily: 'monospace', fontSize: 13, color: active ? _cyan : _textDim),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
   }
 
   void _showCastDialog() async {
@@ -681,6 +720,8 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         onNextEpisode: _playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1
                             ? () { final idx = _episodes.indexOf(_playingEp!); if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]); }
                             : null,
+                        speed: _playbackSpeed,
+                        onSpeed: _showSpeedPicker,
                         onEpisodes: () => setState(() => _showEpisodePanel = !_showEpisodePanel),
                       ),
                     if (_showNextEpPrompt)
@@ -766,7 +807,9 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           onNextEpisode: _playingEp != null && _episodes.indexOf(_playingEp!) < _episodes.length - 1
                               ? () { final idx = _episodes.indexOf(_playingEp!); if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]); }
                               : null,
-                          onEpisodes: () => setState(() => _showEpisodePanel = !_showEpisodePanel),
+                          speed: _playbackSpeed,
+                        onSpeed: _showSpeedPicker,
+                        onEpisodes: () => setState(() => _showEpisodePanel = !_showEpisodePanel),
                         ),
                       // Next episode prompt
                       if (_showNextEpPrompt)
@@ -950,12 +993,15 @@ class _PlayerOverlay extends StatelessWidget {
   final bool isFullscreen;
   final VoidCallback? onNextEpisode;
   final VoidCallback? onEpisodes;
+  final VoidCallback? onSpeed;
+  final double speed;
 
   const _PlayerOverlay({
     required this.position,
     required this.duration,
     required this.isPlaying,
     required this.volume,
+    required this.speed,
     required this.onPlayPause,
     required this.onSeek,
     required this.onSeekEnd,
@@ -968,6 +1014,7 @@ class _PlayerOverlay extends StatelessWidget {
     required this.isFullscreen,
     this.onNextEpisode,
     this.onEpisodes,
+    this.onSpeed,
   });
 
   String _fmt(Duration d) {
@@ -1044,6 +1091,27 @@ class _PlayerOverlay extends StatelessWidget {
                   tooltip: 'Next episode',
                 ),
               const Spacer(),
+              // Speed button
+              if (onSpeed != null)
+                GestureDetector(
+                  onTap: onSpeed,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: speed != 1.0
+                          ? const Color(0xFF00d4d4).withOpacity(0.6)
+                          : Colors.white24),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      speed == speed.truncateToDouble() ? '${speed.toInt()}x' : '${speed}x',
+                      style: TextStyle(
+                        fontFamily: 'monospace', fontSize: 11,
+                        color: speed != 1.0 ? const Color(0xFF00d4d4) : Colors.white70,
+                      ),
+                    ),
+                  ),
+                ),
               // Episodes button
               if (onEpisodes != null)
                 IconButton(
