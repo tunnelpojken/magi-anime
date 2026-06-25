@@ -13,7 +13,8 @@ class HealthService extends ChangeNotifier {
   final ApiService _api;
 
   HealthService(this._api) {
-    _check();
+    // Delay first check so it doesn't compete with initial browse loading
+    Future.delayed(const Duration(seconds: 10), _check);
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => _check());
   }
 

@@ -114,6 +114,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final history = context.watch<SearchHistoryService>();
+    final historyList = history.history;
 
     return Column(
       children: [
@@ -305,7 +306,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     ? Center(child: Text('Error: $_error', style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: _red)))
                     : _results.isEmpty && _searchController.text.isEmpty
                         ? _SearchHistory(
-                            history: history.history,
+                            history: historyList,
                             onTap: (q) {
                               _searchController.text = q;
                               _search();

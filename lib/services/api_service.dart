@@ -112,7 +112,7 @@ class ApiService extends ChangeNotifier {
       }
     ''');
     final items = (data['Page']?['media'] as List?) ?? [];
-    return items.map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
+    return items.where((i) => i != null).map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
   }
 
   Future<List<AnilistMedia>> fetchSeasonal(int year, String season) async {
@@ -124,7 +124,7 @@ class ApiService extends ChangeNotifier {
       }
     ''');
     final items = (data['Page']?['media'] as List?) ?? [];
-    return items.map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
+    return items.where((i) => i != null).map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
   }
 
   Future<Map<String, dynamic>?> fetchSkipTimes(int malId, int episode) async {
@@ -204,7 +204,7 @@ class ApiService extends ChangeNotifier {
       }
     ''');
     final items = (data['Page']?['media'] as List?) ?? [];
-    return items.map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
+    return items.where((i) => i != null).map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
   }
 
   Future<List<AnilistMedia>> anilistSearch(String query) async {
@@ -216,7 +216,7 @@ class ApiService extends ChangeNotifier {
       }
     ''', {'s': query});
     final items = (data['Page']?['media'] as List?) ?? [];
-    return items.map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
+    return items.where((i) => i != null).map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>)).toList();
   }
 
   Future<AnilistMedia?> fetchAnilistByName(String name) async {

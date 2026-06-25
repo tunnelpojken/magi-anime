@@ -200,12 +200,7 @@ class _AnimePreviewContent extends StatelessWidget {
                 Row(children: [
                   Expanded(
                     child: GestureDetector(
-                      onTap: () {
-                        onClose();
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          if (context.mounted) _watch(context);
-                        });
-                      },
+                      onTap: () => _watch(context),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
@@ -242,14 +237,11 @@ class _AnimePreviewContent extends StatelessWidget {
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () {
+                      final nav = Navigator.of(context);
                       onClose();
-                      Future.delayed(const Duration(milliseconds: 300), () {
-                        if (context.mounted) {
-                          Navigator.push(context, fadeSlideRoute(
-                            DetailScreen(media: media, provider: provider),
-                          ));
-                        }
-                      });
+                      nav.push(fadeSlideRoute(
+                        DetailScreen(media: media, provider: provider),
+                      ));
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -274,26 +266,28 @@ class _AnimePreviewContent extends StatelessWidget {
   void _watch(BuildContext context) async {
     final api = context.read<ApiService>();
     final history = context.read<HistoryService>();
+    // Capture navigator before any async gap
+    final rootNav = Navigator.of(context, rootNavigator: true);
     showDialog(context: context, barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator(color: _cyan)));
     try {
       final results = await api.search(media.title, provider);
-      if (!context.mounted) return;
-      Navigator.pop(context);
+      rootNav.pop(); // dismiss loading
       if (results.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No results found')));
         return;
       }
       final anime = results.first;
       final saved = history.getEntry(anime.id);
-      Navigator.push(context, fadeSlideRoute(
+      // Close panel first, then push episode screen on root navigator
+      onClose();
+      await Future.delayed(const Duration(milliseconds: 320));
+      rootNav.push(fadeSlideRoute(
         EpisodeScreen(anime: anime, anilistMedia: media, autoPlay: saved?.episode ?? 1.0, autoPlayResume: saved?.progress),
       ));
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      rootNav.pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 }
