@@ -103,6 +103,33 @@ class ApiService extends ChangeNotifier {
     return data['data'] as Map<String, dynamic>;
   }
 
+  Future<List<AnilistMedia>> fetchBrowseRowPaged(String query, {int perPage = 50, int pages = 999}) async {
+    final all = <AnilistMedia>[];
+    for (int page = 1; page <= pages; page++) {
+      try {
+        final data = await _anilistQuery('''
+          query {
+            Page(page: $page, perPage: $perPage) {
+              pageInfo { hasNextPage }
+              media($query, type: ANIME) { $_mediaFields }
+            }
+          }
+        ''');
+        final items = (data['Page']?['media'] as List?) ?? [];
+        final parsed = items.where((i) => i != null)
+            .map((i) => AnilistMedia.fromJson(i as Map<String, dynamic>))
+            .toList();
+        all.addAll(parsed);
+        // Stop if no more pages
+        final hasNextPage = data['Page']?['pageInfo']?['hasNextPage'] as bool? ?? false;
+        if (!hasNextPage) break;
+        // Small delay to respect AniList rate limit (90 req/min)
+        await Future.delayed(const Duration(milliseconds: 700));
+      } catch (_) { break; }
+    }
+    return all;
+  }
+
   Future<List<AnilistMedia>> fetchBrowseRow(String mediaQuery) async {
     final data = await _anilistQuery('''
       query {

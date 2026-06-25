@@ -19,6 +19,7 @@ import 'settings_screen.dart';
 import 'airing_screen.dart';
 import 'watchlist_screen.dart';
 import 'search_screen.dart';
+import 'browse_all_screen.dart';
 
 const _cyan = Color(0xFF00d4d4);
 const _bg = Color(0xFF0a0b0f);
@@ -222,6 +223,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             onFeaturedWatch: () {
               if (_featured != null) _openDetail(_featured!);
             },
+            provider: _provider,
           ),
           SearchScreen(provider: _provider),
           WatchlistScreen(provider: _provider),
@@ -355,6 +357,7 @@ class _BrowseTab extends StatelessWidget {
   final void Function(AnimeResult) onHistoryTap;
   final void Function(String) onRetry;
   final VoidCallback onFeaturedWatch;
+  final String provider;
 
   const _BrowseTab({
     required this.featured,
@@ -365,6 +368,7 @@ class _BrowseTab extends StatelessWidget {
     required this.onHistoryTap,
     required this.onRetry,
     required this.onFeaturedWatch,
+    required this.provider,
   });
 
   @override
@@ -420,6 +424,16 @@ class _BrowseTab extends StatelessWidget {
                   _SectionHeader(
                     title: row['label']!,
                     showSeeAll: browseCache.containsKey(row['label']),
+                    onSeeAll: browseCache.containsKey(row['label'])
+                        ? () => Navigator.push(context, fadeSlideRoute(
+                            BrowseAllScreen(
+                              label: row['label']!,
+                              query: row['query']!,
+                              initialItems: browseCache[row['label']]!,
+                              provider: provider,
+                            ),
+                          ))
+                        : null,
                   ),
                   const SizedBox(height: 12),
                   browseErrors.containsKey(row['label'])
@@ -567,7 +581,8 @@ class _HeroBadge extends StatelessWidget {
 class _SectionHeader extends StatelessWidget {
   final String title;
   final bool showSeeAll;
-  const _SectionHeader({required this.title, this.showSeeAll = false});
+  final VoidCallback? onSeeAll;
+  const _SectionHeader({required this.title, this.showSeeAll = false, this.onSeeAll});
 
   @override
   Widget build(BuildContext context) {
@@ -576,9 +591,12 @@ class _SectionHeader extends StatelessWidget {
         Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _textPrimary)),
         const Spacer(),
         if (showSeeAll)
-          Text('SEE ALL →', style: TextStyle(
-            fontFamily: 'monospace', fontSize: 10, color: _cyan.withOpacity(0.7), letterSpacing: 1,
-          )),
+          GestureDetector(
+            onTap: onSeeAll,
+            child: Text('SEE ALL →', style: TextStyle(
+              fontFamily: 'monospace', fontSize: 10, color: _cyan.withOpacity(0.7), letterSpacing: 1,
+            )),
+          ),
       ],
     );
   }
