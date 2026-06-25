@@ -202,10 +202,14 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
       }
 
       setState(() { _status = 'DONE! RESTARTING...'; });
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      // Restart the app
-      await Process.run('/opt/magi-anime/magi_anime', [], runInShell: true);
+      // Launch new instance then exit current one
+      await Process.start('/opt/magi-anime/magi_anime', [],
+        mode: ProcessStartMode.detached,
+        runInShell: false,
+      );
+      await Future.delayed(const Duration(milliseconds: 500));
       exit(0);
     } catch (e) {
       setState(() { _status = 'ERROR: $e'; _updating = false; });
