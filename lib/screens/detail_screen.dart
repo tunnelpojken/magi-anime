@@ -11,7 +11,7 @@ const _cyan = Color(0xFF00d4d4);
 const _bg2 = Color(0xFF111827);
 const _bg3 = Color(0xFF0d0f18);
 const _border = Color(0xFF1e2130);
-const _textDim = Color(0xFF475569);
+const _textDim = Color(0xFFcbd5e1);
 
 class DetailScreen extends StatelessWidget {
   final AnilistMedia media;

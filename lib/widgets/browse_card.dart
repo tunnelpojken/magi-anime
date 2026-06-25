@@ -7,7 +7,7 @@ const _bg2 = Color(0xFF111827);
 const _border = Color(0xFF1e2130);
 const _cyan = Color(0xFF00d4d4);
 const _textPrimary = Color(0xFFcbd5e1);
-const _textMuted = Color(0xFF64748b);
+const _textMuted = Color(0xFFcbd5e1);
 
 class BrowseCardWidget extends StatefulWidget {
   final AnilistMedia media;

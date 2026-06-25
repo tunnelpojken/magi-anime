@@ -14,7 +14,7 @@ const _cyan = Color(0xFF00d4d4);
 const _bg2 = Color(0xFF0f1117);
 const _bg3 = Color(0xFF151720);
 const _border = Color(0xFF1e2130);
-const _textDim = Color(0xFF7a8090);
+const _textDim = Color(0xFF94a3b8);
 const _red = Color(0xFFd44000);
 
 class EpisodeScreen extends StatefulWidget {
@@ -779,6 +779,8 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                         speed: _playbackSpeed,
                         onSpeed: _showSpeedPicker,
                         onEpisodes: () => setState(() => _showEpisodePanel = !_showEpisodePanel),
+                        title: widget.anime.name,
+                        episode: _playingEp,
                       ),
                     if (_showNextEpPrompt)
                       _NextEpPrompt(
@@ -866,6 +868,8 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           speed: _playbackSpeed,
                         onSpeed: _showSpeedPicker,
                         onEpisodes: () => setState(() => _showEpisodePanel = !_showEpisodePanel),
+                        title: widget.anime.name,
+                        episode: _playingEp,
                         ),
                       // Next episode prompt
                       if (_showNextEpPrompt)
@@ -1051,6 +1055,8 @@ class _PlayerOverlay extends StatelessWidget {
   final VoidCallback? onEpisodes;
   final VoidCallback? onSpeed;
   final double speed;
+  final String? title;
+  final double? episode;
 
   const _PlayerOverlay({
     required this.position,
@@ -1071,6 +1077,8 @@ class _PlayerOverlay extends StatelessWidget {
     this.onNextEpisode,
     this.onEpisodes,
     this.onSpeed,
+    this.title,
+    this.episode,
   });
 
   String _fmt(Duration d) {
@@ -1094,6 +1102,18 @@ class _PlayerOverlay extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          // Episode label
+          if (episode != null || title != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                episode != null && title != null
+                    ? 'EP ${episode!.toInt()} — $title'
+                    : episode != null ? 'EPISODE ${episode!.toInt()}' : title!,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.white60, letterSpacing: 1),
+                textAlign: TextAlign.center,
+              ),
+            ),
           // Seek bar
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1238,7 +1258,7 @@ class _NextEpPrompt extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('NEXT EPISODE IN', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Color(0xFF5a6080), letterSpacing: 2)),
+            const Text('NEXT EPISODE IN', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Color(0xFF94a3b8), letterSpacing: 2)),
             Text('$countdown', style: const TextStyle(fontFamily: 'monospace', fontSize: 32, color: Color(0xFF00d4d4), height: 1)),
             const SizedBox(height: 10),
             Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1247,7 +1267,7 @@ class _NextEpPrompt extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(border: Border.all(color: const Color(0xFF1e2130))),
-                  child: const Text('CANCEL', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Color(0xFF5a6080), letterSpacing: 1)),
+                  child: const Text('CANCEL', style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: Color(0xFF94a3b8), letterSpacing: 1)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -1388,7 +1408,7 @@ class _ShortcutRow extends StatelessWidget {
             style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Color(0xFF00d4d4))),
         ),
         const SizedBox(width: 16),
-        Text(description, style: const TextStyle(fontSize: 13, color: Color(0xFF94a3b8))),
+        Text(description, style: const TextStyle(fontSize: 13, color: Color(0xFFcbd5e1))),
       ]),
     );
   }

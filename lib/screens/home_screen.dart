@@ -26,8 +26,8 @@ const _bg2 = Color(0xFF111827);
 const _bg3 = Color(0xFF0d0f18);
 const _border = Color(0xFF1e2130);
 const _textPrimary = Color(0xFFe2e8f0);
-const _textSecondary = Color(0xFF94a3b8);
-const _textMuted = Color(0xFF64748b);
+const _textSecondary = Color(0xFFcbd5e1);
+const _textMuted = Color(0xFFcbd5e1);
 
 const _browseRows = [
   {'label': 'Currently airing', 'query': 'status: RELEASING, sort: POPULARITY_DESC'},
