@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 const _githubRepo = 'tunnelpojken/magi-anime';
 const _cyan = Color(0xFF00d4d4);
 const _bg2 = Color(0xFF0f1117);
-const _textDim = Color(0xFF5a6080);
+const _textDim = Color(0xFF94a3b8);
 const _border = Color(0xFF1e2130);
 
 // Reads version from pubspec.yaml automatically
@@ -196,9 +196,18 @@ class _LinuxUpdateDialogState extends State<_LinuxUpdateDialog> {
           setState(() { _status = 'ERROR: No terminal found. Run manually:\nsudo bash $scriptPath'; });
           return;
         }
-        await Process.start(terminal, ['--', 'sudo', 'bash', scriptPath]);
-        // Give terminal time to complete before restarting
-        await Future.delayed(const Duration(seconds: 5));
+        // Write a wrapper script that installs then launches new instance
+        final wrapperPath = '${tmpDir.path}/magi_update_wrapper.sh';
+        await File(wrapperPath).writeAsString(
+          '#!/bin/bash\n'
+          'sudo bash "$scriptPath"\n'
+          'nohup /opt/magi-anime/magi_anime &\n'
+          'disown\n'
+        );
+        await Process.run('chmod', ['+x', wrapperPath]);
+        await Process.start(terminal, ['--', 'bash', wrapperPath]);
+        // Give terminal time to complete
+        await Future.delayed(const Duration(seconds: 8));
       }
 
       setState(() { _status = 'DONE! RESTARTING...'; });
