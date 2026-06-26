@@ -62,6 +62,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
 
   // Next episode
   bool _showNextEpPrompt = false;
+  bool _cancelledNextEp = false;
   int _nextEpCountdown = 5;
   Timer? _nextEpTimer;
 
@@ -115,12 +116,15 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
       if (mounted) setState(() => _isPlaying = playing);
     });
     _completeSub = _player.stream.completed.listen((completed) {
-      if (completed && mounted) _onEpisodeComplete();
+      if (completed && mounted) {
+        if (_cancelledNextEp) setState(() => _cancelledNextEp = false);
+        _onEpisodeComplete();
+      }
     });
   }
 
   void _onEpisodeComplete() {
-    if (_showNextEpPrompt || _playingEp == null) return;
+    if (_showNextEpPrompt || _playingEp == null || _cancelledNextEp) return;
     final idx = _episodes.indexOf(_playingEp!);
     if (idx < 0 || idx >= _episodes.length - 1) return;
     final nextEp = _episodes[idx + 1];
@@ -156,7 +160,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   }
 
   void _checkNextEpTiming(Duration pos) {
-    if (_showNextEpPrompt || _playingEp == null) return;
+    if (_showNextEpPrompt || _playingEp == null || _cancelledNextEp) return;
     final cast = context.read<CastService>();
     // Use cast duration/position when casting
     final dur = cast.isConnected ? cast.castDuration : _duration;
@@ -564,7 +568,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
   }
 
   Future<void> _playEpisode(double ep, {Duration? resumeFrom}) async {
-    setState(() { _loadingStream = true; _playingEp = ep; _playerReady = false; _showNextEpPrompt = false; _showSkipIntro = false; _showSkipOutro = false; _skipTimes = null; });
+    setState(() { _loadingStream = true; _playingEp = ep; _playerReady = false; _showNextEpPrompt = false; _cancelledNextEp = false; _showSkipIntro = false; _showSkipOutro = false; _skipTimes = null; });
     _progressTimer?.cancel();
     _nextEpTimer?.cancel();
     _lastSavedPosition = Duration.zero;
@@ -791,7 +795,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                           final idx = _episodes.indexOf(_playingEp!);
                           if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]);
                         },
-                        onCancel: () { _nextEpTimer?.cancel(); setState(() => _showNextEpPrompt = false); },
+                        onCancel: () { _nextEpTimer?.cancel(); setState(() { _showNextEpPrompt = false; _cancelledNextEp = true; }); },
                       ),
                     if (_showSkipIntro)
                       _SkipButton(label: 'SKIP INTRO', onTap: () {
@@ -881,7 +885,7 @@ class _EpisodeScreenState extends State<EpisodeScreen> with WidgetsBindingObserv
                             final idx = _episodes.indexOf(_playingEp!);
                             if (idx >= 0 && idx < _episodes.length - 1) _playEpisode(_episodes[idx + 1]);
                           },
-                          onCancel: () { _nextEpTimer?.cancel(); setState(() => _showNextEpPrompt = false); },
+                          onCancel: () { _nextEpTimer?.cancel(); setState(() { _showNextEpPrompt = false; _cancelledNextEp = true; }); },
                         ),
                       if (_showSkipIntro)
                         _SkipButton(label: 'SKIP INTRO', onTap: () {
